@@ -1,0 +1,6 @@
+.Rhistory
+.ipynb_checkpoints
+__pycache__
+chromedriver.exe
+ice-cream-dataset-v*
+TO DO.txt
