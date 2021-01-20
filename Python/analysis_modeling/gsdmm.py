@@ -1,3 +1,6 @@
+# CODE IN THIS FILE IS NOT MY OWN
+# Source: https://github.com/rwalk/gsdmm/blob/master/gsdmm/mgp.py
+
 from numpy.random import multinomial
 from numpy import log, exp
 from numpy import argmax

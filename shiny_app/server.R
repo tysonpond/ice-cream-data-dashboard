@@ -1,7 +1,7 @@
 shinyServer(function(input, output) {
     # --------- BRAND OVERVIEW --------
     output$brandImage <- renderImage({
-        imgSrc <- paste0("www/logo ", input$brand_in)
+        imgSrc <- paste0(PATH_TO_IMAGES, "logo ", input$brand_in)
         if (input$brand_in %in% c("bj", "hd")){
             imgSrc <- paste0(imgSrc, ".png")
         }
@@ -53,7 +53,7 @@ shinyServer(function(input, output) {
     Map(function(i) {
         output[[paste0("top_prod_", i)]] <- renderImage({
             data <- top3_prod()
-            imgSrc <- paste0("www/", data$key[i], ".png")
+            imgSrc <- paste0(PATH_TO_IMAGES, data$key[i], ".png")
             list(src = imgSrc, width="170", height="170", alt="brand image")
         }, deleteFile = FALSE)
     }, 1:3)
@@ -77,73 +77,52 @@ shinyServer(function(input, output) {
     
     output$overview_dist <- renderHighchart({
 
-        x    <- rev()$stars
-        bins <- seq(0.5, 5.5, length.out = 6)
-        h <- hist(x, breaks = bins, plot = FALSE)
-        
-        hchart(h, breaks = bins) %>% 
-            hc_yAxis(title = list(text = "Count")) %>% 
+        data <- rev() %>% count(stars)
+        data <- data %>% hchart("column", hcaes(x = stars, y = n)) %>% 
             hc_xAxis(title = list(text = "Star rating")) %>%
+            hc_yAxis(title = list(text = "Number of reviews")) %>% 
             hc_title(text = "Distribution of star ratings") %>%
-            hc_tooltip(borderWidth = 1, sort = TRUE, crosshairs = TRUE,
-                       headerFormat = "") %>%
-            hc_legend(enabled = FALSE) %>%
-            hc_plotOptions(
-                series = list(groupPadding = 0, pointPadding =  0, borderWidth = 0)
-            )
+            hc_tooltip(crosshairs = TRUE, sort = TRUE, headerFormat = "", pointFormat = "<b> {point.x} Star </b> <br> {point.y}") %>%
+            hc_legend(enabled = FALSE)
     })
 
     output$overview_ts <- renderHighchart({
-        dat <- rev()
+        data <- rev()
         agg_freq <- input$overview_ts_agg_freq 
         stat <- input$overview_ts_stat
         smoothing <- as.numeric(input$overview_ts_smoothing)
         
-        rev_by_date <- dat %>% 
+        data<- data %>% 
             group_by(!!as.name(agg_freq)) %>%
             summarize(mean_rating = mean(stars), n = n())
         
-        start <- min(rev_by_date[[agg_freq]])
-        end <- max(rev_by_date[[agg_freq]])
-        rev_by_date <- rev_by_date %>% complete( {{agg_freq}} := seq.Date(start, end, by=agg_freq), fill = list(n=0))
+        start <- rev_dateRange()[[agg_freq]]$start
+        end <- rev_dateRange()[[agg_freq]]$end
+        data <- data %>% 
+            complete( {{agg_freq}} := seq.Date(start, end, by=agg_freq), fill = list(n=0)) %>%
+            mutate({{stat}} := smooth_ts_data(!!as.name(stat), p = smoothing))
         
-        x <- rev_by_date %>% select(c(agg_freq, stat))
-        
-        # hchart(x, "line", hcaes(x = !!as.name(agg_freq), y = !!as.name(stat)), marker = list(enabled = FALSE))
-        
-        if (smoothing > 0){
-            x <- x %>% mutate({{stat}} := smooth_ts_data(!!as.name(stat), p = smoothing))
-        }
-        
+        x <- data %>% mutate({{stat}} := smooth_ts_data(!!as.name(stat), p = smoothing))
         
         x <- as.xts(x[[stat]], x[[agg_freq]]) 
         
-        stat_label <- switch(stat, "n" = "Review count", "mean_rating" = "Mean rating")
-        agg_label <- switch(agg_freq, "month" = "Month", "week" = "Week")
-        hchart(x) %>%
-            hc_rangeSelector( buttons = list(
-                list(type = 'month', count = 6, text = '6m'),
-                list(type = 'ytd', text = 'YTD'),
-                list(type = 'year', count = 1, text = '1y'),
-                list(type = 'year', count = 2, text = '2y'),
-                list(type = 'all', text = 'All')
-            )) %>%
-            hc_yAxis(title = list(text = stat_label), opposite = FALSE) %>%
-            hc_xAxis(title = list(text = agg_label)) %>% 
-            hc_title(text = paste(stat_label, "per", agg_freq))
+        stat_label <- switch(stat, "n" = "Number of reviews", "mean_rating" = "Average rating")
+        make_ts_plot(series_list = list(x), 
+                     yLab = stat_label, 
+                     marker = if (stat == "mean_rating") TRUE else FALSE,
+                     title = paste(stat_label, "per", agg_freq))
     })
     
     output$overview_by_prod <- renderHighchart({
         data <- prod()
         stat <- input$overview_by_prod_stat
-        
-        if (stat == "rating"){
-            bins <- seq(0.5, 5.5, length.out = 6)
-            h <- hist(data$rating, breaks = bins, plot = FALSE)
-            hchart(h, breaks = bins)
-        } else {
-            hchart(data$rating_count)
-        }
+        data <- if (stat == "Average rating") data$rating else data$rating_count
+        hchart(data) %>%
+            hc_xAxis(title = list(text = stat)) %>%
+            hc_yAxis(title = list(text = "Number of products")) %>% 
+            hc_title(text = paste("Distribution of", tolower(stat), "by product")) %>%
+            hc_tooltip(crosshairs = TRUE, sort = TRUE, headerFormat = "", pointFormat = "<b> {point.name} </b> <br> {point.y}") %>%
+            hc_legend(enabled = FALSE)
     })
     # --------- END BRAND OVERVIEW ---------
     
@@ -175,7 +154,7 @@ shinyServer(function(input, output) {
         lemmatization <- ifelse(lemmatization, "lemma", "token")
         
         # Load parsed reviews
-        parsedtxt <- read.csv("../data/parsed_reviews.csv", encoding = "UTF-8")
+        parsedtxt <- read.csv(paste0(PATH_TO_APPDATA, "parsed_reviews.csv"), encoding = "UTF-8")
         
         # Rename token column (lemma/token) to "word" and drop other column
         parsedtxt <- parsedtxt %>%
@@ -197,14 +176,14 @@ shinyServer(function(input, output) {
         # 1. Standard English stopwords (see https://github.com/igorbrigadir/stopwords for a comprehensive database)
         standard_sw <- switch(standard_sw,
                               "None" = c(),
-                              "Snowball (174 words)" = read.csv("../data/Snowball_sw_parsed.csv", encoding = "UTF-8")[[lemmatization]],
-                              "SMART (571 words)" = read.csv("../data/SMART_sw_parsed.csv", encoding = "UTF-8")[[lemmatization]]
+                              "Snowball (174 words)" = read.csv(paste0(PATH_TO_APPDATA, "Snowball_sw_parsed.csv"), encoding = "UTF-8")[[lemmatization]],
+                              "SMART (571 words)" = read.csv(paste0(PATH_TO_APPDATA, "SMART_sw_parsed.csv"), encoding = "UTF-8")[[lemmatization]]
     
         )
         
         # 2. Task-specific stopwords
         if (length(task_sw) > 0){
-            custom_sw <- read.csv("../data/task_sw_parsed.csv", encoding = "UTF-8")
+            custom_sw <- read.csv(paste0(PATH_TO_APPDATA, "task_sw_parsed.csv"), encoding = "UTF-8")
             custom_sw <- custom_sw %>% 
                 filter(brand == input$brand_in & doc_type %in% task_sw)
             custom_sw <- custom_sw[[lemmatization]]
@@ -214,7 +193,7 @@ shinyServer(function(input, output) {
         }
         
         # some additional words/misspellings to include in stopwords
-        other_sw <- read.csv("../data/other_sw_parsed.csv", encoding = "UTF-8")[[lemmatization]]
+        other_sw <- read.csv(paste0(PATH_TO_APPDATA, "other_sw_parsed.csv"), encoding = "UTF-8")[[lemmatization]]
         
         # combine all stopwords
         sw <- unique(c(standard_sw, custom_sw, other_sw))
@@ -324,54 +303,50 @@ shinyServer(function(input, output) {
     # --------- BASIC STATS ------------
     output$counts_plot1 <- renderHighchart({
         data <- preprocessed_rev()[["rev_data"]]
+        count_stat <- input$count_stat
         data <- data %>% 
             group_by(doc_id) %>%
-            summarize(value = switch(input$count_stat,
+            summarize(value = switch(count_stat,
                                      "Characters" = sum(nchar(word)),
                                      "Words" = n(),
                                      "Sentences" = length(unique(sentence_id)))
             )
         
-        dataRange <- range(data$value)
-        bins <- seq(dataRange[1] - 0.5, dataRange[2] + 0.5, length.out = dataRange[2] - dataRange[1] + 2)
-        h <- hist(data$value, breaks = bins, plot = FALSE)
+
+        # dataRange <- range(data$value)
+        # bins <- seq(dataRange[1] - 0.5, dataRange[2] + 0.5, length.out = dataRange[2] - dataRange[1] + 2)
+        # h <- hist(data$value, breaks = bins, plot = FALSE)
+        h <- hist(data$value, plot = FALSE)
         
-        count_stat <- input$count_stat
-        hc <- hchart(h, breaks = bins) %>% 
-            hc_yAxis(title = list(text = "Count")) %>% 
-            hc_xAxis(title = list(text = count_stat)) %>%
-            hc_title(text = paste("Distribution of", count_stat, "count")) %>%
-            hc_tooltip(borderWidth = 1, sort = TRUE, crosshairs = TRUE,
-                       headerFormat = "",
-                       pointFormatter = JS("function() { return this.x;    
-             }")) %>%
-            hc_legend(enabled = FALSE) %>%
-            hc_plotOptions(
-                series = list(groupPadding = 0, pointPadding =  0, borderWidth = 0)
-            )
-        hc
+        hchart(h) %>% 
+            hc_xAxis(title = list(text = paste("Number of", tolower(count_stat)))) %>%
+            hc_yAxis(title = list(text = "Number of reviews")) %>% 
+            hc_title(text = paste("Distribution of", substr(tolower(count_stat), start = 1, stop = nchar(count_stat)-1), "count")) %>%
+            hc_tooltip(crosshairs = TRUE, sort = TRUE, headerFormat = "", pointFormat = "<b> {point.name} </b> <br> {point.y}") %>%
+            hc_legend(enabled = FALSE)
     })
     
     output$counts_plot2 <- renderHighchart({
         data <- preprocessed_rev()[["rev_data"]]
+        count_stat <- input$count_stat
+        
         data <- data %>% 
-            group_by(doc_id, stars) %>%
-            summarize(value = switch(input$count_stat,
+            group_by(stars, doc_id) %>%
+            summarize(value = switch(count_stat,
                                      "Characters" = sum(nchar(word)),
                                      "Words" = n(),
                                      "Sentences" = length(unique(sentence_id)))
             ) %>%
-            group_by(stars) %>%
-            summarize(stat = median(value))
+            summarize(stat = mean(value))
         
-        count_stat <- input$count_stat
-        hc <- data %>%
+        
+        data %>%
             hchart('column', hcaes(x = stars, y = stat)) %>%
-            hc_yAxis(title = list(text = "Count")) %>% 
-            hc_xAxis(title = list(text = count_stat)) %>%
-            hc_title(text = paste("Distribution of", count_stat, "count"))
-        hc
-        
+            hc_xAxis(title = list(text = "Star rating")) %>%
+            hc_yAxis(title = list(text = paste("Average number of", tolower(count_stat)))) %>%
+            hc_title(text = paste("Average", substr(tolower(count_stat), start = 1, stop = nchar(count_stat)-1), "count by star rating")) %>%
+            hc_tooltip(crosshairs = TRUE, sort = TRUE, headerFormat = "", pointFormat = "<b> {point.x} Star </b> <br> {point.y:.2f}") %>%
+            hc_legend(enabled = FALSE)
     })
     
     output$diversity_table1 <- renderDataTable({
@@ -398,12 +373,14 @@ shinyServer(function(input, output) {
         df_out <- df_out[,c("stars","nunq", "nunq_dens", "entropy", "perplexity", "simpson")]
         names(df_out) <- c("Stars", "Unique words", "Unique words density", "Shannon entropy", "Perplexity", "Simpson index")
         
-        DT::datatable(df_out, options = list(searching = FALSE, paging = FALSE, bInfo = FALSE, ordering=F), rownames= FALSE) %>% 
+        DT::datatable(df_out, selection = "none", options = list(searching = FALSE, paging = FALSE, bInfo = FALSE, ordering=F), rownames= FALSE) %>% 
             formatRound(c(3,4,5), 3, mark = "") %>% formatRound(6, 6)
     })
     
     output$diversity_plot1 <- renderHighchart({
         data <- preprocessed_rev()[["rev_data"]]
+        diversity_stat <- input$diversity_stat
+        
         data <- data %>% 
             group_by(doc_id) %>%
             summarize(
@@ -411,11 +388,15 @@ shinyServer(function(input, output) {
             nunq_dens = length(unique(word))/n()
             )
         
-        diversity_stat <- switch(input$diversity_stat, "Unique words" = "nunq", "Unique words density" = "nunq_dens") 
-        x <- data[[diversity_stat]]
-        hc <- hchart(density(x))
-        hc
+        data <- if (diversity_stat == "Unique words density") data$nunq_dens else data$nunq
+        h <- hist(data, plot = FALSE)
         
+        hchart(h) %>%
+            hc_xAxis(title = list(text = diversity_stat)) %>%
+            hc_yAxis(title = list(text = "Number of reviews")) %>%
+            hc_title(text = paste("Distribution of", tolower(diversity_stat))) %>%
+            hc_tooltip(crosshairs = TRUE, sort = TRUE, headerFormat = "", pointFormat = "<b> {point.name} </b> <br> {point.y}") %>%
+            hc_legend(enabled = FALSE)
     })
     
     output$rank_freq <- renderHighchart({
@@ -431,9 +412,7 @@ shinyServer(function(input, output) {
             hc_chart(zoomType = "x") %>%
             hc_xAxis(type = "logarithmic", tickInterval = 1, minRange = 1, title = list(text = "Rank")) %>%
             hc_yAxis(type = "logarithmic", title = list(text = "Frequency")) %>%
-            hc_tooltip(borderWidth = 1, crosshairs = TRUE,
-                       headerFormat = "",
-                       pointFormatter = JS("function() {return this.word;}")
+            hc_tooltip(crosshairs = TRUE, headerFormat = "", pointFormatter = JS("function() {return this.word;}")
             )
         hc
     })
@@ -453,9 +432,9 @@ shinyServer(function(input, output) {
         
         data <- data %>% count(word) 
 
-        make_wordcloud(data, monochrome = monochrome, max_words_disp = max_words_disp)
+        make_wordcloud(data, monochrome = monochrome, max_words = wordcloud_max_words)
         # wordcloud2a(data = data, size = 0.25, shape = "circle",
-        #             color = sample(getOption("highcharter.theme")$colors, size = max_words_disp, replace = TRUE))
+        #             color = sample(getOption("highcharter.theme")$colors, size = wordcloud_max_words, replace = TRUE))
     })
     
     # ----------- END BASIC STATS --------
@@ -484,7 +463,7 @@ shinyServer(function(input, output) {
         data <- form_ngrams(data, ngram_length = ngram_length, sep = table_sep)
         data <- get_word_counts(data, bind_rev_numbers = bind_rev_numbers)
         
-        make_wordtable(data)
+        make_wordtable(data, max_words = table_max_words)
     })
     
     output$ngram_wordcloud <- renderHighchart({
@@ -502,7 +481,7 @@ shinyServer(function(input, output) {
         data <- form_ngrams(data, ngram_length = ngram_length, sep = wordcloud_sep)
         data <- get_word_counts(data, bind_rev_numbers = FALSE)
         
-        make_wordcloud(data, monochrome = monochrome, max_words_disp = max_words_disp) 
+        make_wordcloud(data, monochrome = monochrome, max_words = wordcloud_max_words) 
     })
     
     output$pos_neg_comparison <- renderHighchart({
@@ -521,31 +500,15 @@ shinyServer(function(input, output) {
         data <- data %>% select(doc_id, word) %>% inner_join(rev() %>% select(rev_id, stars), by = c("doc_id" = "rev_id"))
         data <- data %>% mutate(group = case_when(stars < 5 ~ "G1", TRUE ~ "G2"))
         
-        data <- get_word_comparison_data(data = data, top_words = top_words)
+        data <- get_word_comparison_data(data = data, max_words = barchart_max_words)
         
-        highchart() %>%
-            hc_add_series(data$G2, type = "bar", name = "positive") %>%
-            hc_add_series(data$G1, type = "bar", name = "negative") %>%
-            hc_xAxis(categories = data$categories,
-                     labels = list(step = 1),
-                     plotLines = list(
-                         list(color = "#000000",
-                              width = 2,
-                              value = top_words - 0.5)
-                     )) %>%
-            hc_plotOptions(series = list(stacking = "normal")) %>%
-            hc_yAxis(
-                labels = list(
-                    formatter = JS("function(){return Math.abs(this.value);}")
-                )
-            ) %>%
-            hc_tooltip(
-                shared = FALSE,
-                formatter = JS("function () {
-            return this.point.category + '<br/>' + 
-            '<b>' + this.series.name + '</b> ' + 
-            Highcharts.numberFormat(Math.abs(this.point.y), 1);}")
-            )
+        make_word_comparison_barchart(x1 = data$G2,
+                                      name1 = "Positive",
+                                      x2 = data$G1, 
+                                      name2 = "Negative", 
+                                      categories = data$categories,
+                                      xLab = "Difference in N-gram frequency (Positive - Negative)",
+                                      max_words = barchart_max_words)
     })
     
     output$ngram_tracker <- renderHighchart({
@@ -565,17 +528,7 @@ shinyServer(function(input, output) {
         
         x <- lapply(queries, function(q) process_group_query(data, q, agg_freq, normalization, start, end, smoothing))
         
-        highchart(type = "stock") %>%
-            hc_add_series(x[[1]]) %>%
-            hc_add_series(x[[2]]) %>%
-            hc_add_series(x[[3]]) %>%
-            hc_rangeSelector( buttons = list(
-                list(type = 'month', count = 6, text = '6m'),
-                list(type = 'ytd', text = 'YTD'),
-                list(type = 'year', count = 1, text = '1y'),
-                list(type = 'year', count = 2, text = '2y'),
-                list(type = 'all', text = 'All')
-            ))
+        make_ts_plot(series_list = x, series_names = paste("Group", 1:3), yLab = "N-gram frequency", tooltip = FALSE, formatter = JS(multiple_ts_tooltip))
     })
     
     output$cooccurrences_table <- renderDataTable({
@@ -588,7 +541,7 @@ shinyServer(function(input, output) {
         data <- get_cooccurrences(data, cooccurrence_distance, within_sentence, sep = table_sep)
         data <- get_word_counts(data, bind_rev_numbers = bind_rev_numbers)
         
-        make_wordtable(data)
+        make_wordtable(data, max_words = table_max_words)
     })
     
     output$cooccurrences_wordcloud <- renderHighchart({
@@ -601,7 +554,7 @@ shinyServer(function(input, output) {
         data <- get_cooccurrences(data, cooccurrence_distance, within_sentence, sep = wordcloud_sep)
         data <- get_word_counts(data, bind_rev_numbers = FALSE)
         
-        make_wordcloud(data, monochrome = monochrome, max_words_disp = max_words_disp)
+        make_wordcloud(data, monochrome = monochrome, max_words = wordcloud_max_words)
     })
     
     output$dep_parse_table <- renderDataTable({
@@ -611,7 +564,7 @@ shinyServer(function(input, output) {
         data <- get_dep_parse(data, sep = table_sep)
         data <- get_word_counts(data, bind_rev_numbers = bind_rev_numbers)
         
-        make_wordtable(data)
+        make_wordtable(data, max_words = table_max_words)
     })
     
     output$dep_parse_wordcloud <- renderHighchart({
@@ -621,7 +574,7 @@ shinyServer(function(input, output) {
         data <- get_dep_parse(data, sep = wordcloud_sep)
         data <- get_word_counts(data, bind_rev_numbers = FALSE)
         
-        make_wordcloud(data, monochrome = monochrome, max_words_disp = max_words_disp)
+        make_wordcloud(data, monochrome = monochrome, max_words = wordcloud_max_words)
     })
     # ---------- END WORD INSIGHTS ------
 
@@ -635,24 +588,14 @@ shinyServer(function(input, output) {
         
         data <- data %>% inner_join(nrc_sent, by = "word") %>% group_by(sentiment) %>% summarize(n_sent=sum(n))
         
-        hc <- highchart() %>% 
+        highchart() %>% 
             hc_chart(polar = TRUE) %>% 
-            hc_title(text = "Sentiment types") %>% 
-            hc_xAxis(categories = data$sentiment,
-                     tickmarkPlacement = "on",
-                     lineWidth = 0) %>% 
-            hc_yAxis(gridLineInterpolation = "polygon",
-                     lineWidth = 0,
-                     min = 0) %>% 
-            hc_series(
-                list(
-                    name = "All products",
-                    data = data$n_sent,
-                    pointPlacement = "on",
-                    type = "area"
-                )
-            )
-        hc
+            hc_add_series(data$n_sent, type = "area", pointPlacement = "on") %>%
+            hc_xAxis(categories = data$sentiment) %>% 
+            hc_yAxis(labels = list(enabled = FALSE), gridLineInterpolation = "polygon") %>% 
+            hc_title(text = "Sentiment types") %>%
+            hc_tooltip(crosshairs = TRUE, sort = TRUE, headerFormat = "", pointFormat = "<b> {point.category} </b> <br> {point.y}") %>%
+            hc_legend(enabled = FALSE)
         
     })
         
@@ -662,38 +605,74 @@ shinyServer(function(input, output) {
         reform_sentences <- data %>% group_by(doc_id, sentence_id) %>% summarize(sentence=paste0(paste(word, collapse=' '), "."))  
         reform_docs <- reform_sentences %>% group_by(doc_id) %>% summarize(doc=paste0(sentence, collapse=' '))
         sentiment_sentences <- sentimentr::get_sentences(reform_docs)
-        sentiment_scores <- sentiment_sentences %>% 
-            sentimentr::sentiment_by(by = "doc_id") %>% 
-            mutate(ave_sentiment = round(ave_sentiment, 3)) %>% 
-            arrange(desc(ave_sentiment)) %>%
+        
+        # Sentimentr model to get sentiment scores
+        data <- sentiment_sentences %>% sentimentr::sentiment_by(by = "doc_id")
+        
+        # Join with other data
+        data <- data %>%
             inner_join(reform_docs %>% select(doc_id, doc), by = "doc_id")  %>%
-            inner_join(rev() %>% select(rev_id, text, stars, date, month, week), by = c("doc_id" = "rev_id") )
-        return(sentiment_scores)
+            inner_join(rev() %>% select(rev_id, text, stars, date, month, week, title, name, helpful_yes, helpful_no), by = c("doc_id" = "rev_id"))
+        
+        return(data)
     })
     
     output$sentiment_table <- renderDataTable({
         
-        data <- rev_sentiment() %>% select(-c("month", "week"))
+        data <- rev_sentiment() %>% 
+            mutate(votes = helpful_yes + helpful_no) %>% 
+            mutate(helpful = helpful_yes/pmax(1,votes)) 
+        data <- data[,c("title", "text", "doc", "date", "name", "word_count", "ave_sentiment", "sd", "stars", "votes", "helpful")]
         
-        DT::datatable(data, rownames = FALSE)
+        data <- cbind(' ' = '\u2295', data)
+        
+        DT::datatable(data,
+                      rownames = FALSE,
+                      filter = "top",
+                      selection = "none",
+                      options = list(
+                          scrollX = TRUE,
+                          order = list(5, "asc"),
+                          drawCallback = JS("function() {
+                          this.api().table().column(0).nodes().to$().css({'cursor': 'pointer', 'font-size': '18px' });
+                          }"),
+                          columnDefs = list(
+                              list(visible = FALSE, targets = c(1,2,3)),
+                              list(orderable = FALSE, className = 'details-control', targets = 0)
+                          )
+                      ),
+                      callback = js_sentiment_table) %>% formatRound(c(8,9,12),2)
     })
     
     output$sent_dist <- renderHighchart({
         data <- rev_sentiment()
-        data <- density(data$ave_sentiment)
-        hc <- hchart(data)
-        hc
+        h <- hist(data$ave_sentiment, breaks = 20, plot = FALSE)
+        hchart(h) %>%
+            hc_xAxis(title = list(text = "Sentiment score")) %>%
+            hc_yAxis(title = list(text = "Number of reviews")) %>%
+            hc_title(text = "Distribution of sentiment score") %>%
+            hc_tooltip(crosshairs = TRUE, sort = TRUE, headerFormat = "", pointFormat = "<b> {point.name} </b> <br> {point.y}") %>%
+            hc_legend(enabled = FALSE)
     })
     
     output$sent_dist_by_stars <- renderHighchart({
         data <- rev_sentiment()
-        hc <- hcboxplot(
-            x = data$ave_sentiment,
-            var = data$stars,
-            outliers = FALSE
-        ) %>% 
-            hc_chart(type = "column")
-        hc
+        data <- data %>% select(stars, ave_sentiment) %>% data_to_boxplot(variable = ave_sentiment, group_var = stars, add_outliers = FALSE)
+        
+        highchart() %>%
+            hc_add_series_list(data) %>%
+            hc_xAxis(type = "category", title = list(text = "Star rating")) %>%
+            hc_yAxis(title = list(text = "Sentiment score")) %>%
+            hc_title(text = "Distribution of sentiment score") %>%
+            hc_subtitle(text = "Outliers are not shown") %>%
+            hc_tooltip(crosshairs = TRUE, headerFormat = "",
+                       pointFormat = "<b> {point.name} </b> <br>
+                                      Max: {point.high} <br> 
+                                      Q3: {point.q3} <br>
+                                      Median: {point.median} <br>
+                                      Q1: {point.q1} <br>
+                                      Min: {point.low}") %>%
+            hc_legend(enabled = FALSE)
     })
     
     output$sent_ts <- renderHighchart({
@@ -701,18 +680,19 @@ shinyServer(function(input, output) {
         agg_freq <- input$sent_ts_agg_freq
         smoothing <- as.integer(input$sent_ts_smoothing)
         data <- data %>% group_by(!!as.name(agg_freq)) %>% summarize(y = mean(ave_sentiment))
+        
+        # Fill (with NA) dates that are missing sentiment scores
+        start <- rev_dateRange()[[agg_freq]]$start
+        end <- rev_dateRange()[[agg_freq]]$end
+        data <- data %>% complete({{agg_freq}} := seq.Date(start, end, by=agg_freq)) 
+        
         data <- data %>% mutate(y = smooth_ts_data(y, p = smoothing))
         data <- as.xts(data$y, data[[agg_freq]]) 
         
-        highchart(type = "stock") %>%
-            hc_add_series(data) %>%
-            hc_rangeSelector( buttons = list(
-                list(type = 'month', count = 6, text = '6m'),
-                list(type = 'ytd', text = 'YTD'),
-                list(type = 'year', count = 1, text = '1y'),
-                list(type = 'year', count = 2, text = '2y'),
-                list(type = 'all', text = 'All')
-            ))
+        make_ts_plot(series_list = list(data), 
+                     yLab = "Average sentiment score", 
+                     title = paste("Average sentiment", "per", agg_freq),
+                     marker = TRUE)
     })
     
     output$num_valShift <- renderText({
@@ -745,7 +725,7 @@ shinyServer(function(input, output) {
         data <- form_ngrams(data, ngram_length = ngram_length, sep = table_sep)
         data <- get_word_counts(data, bind_rev_numbers = bind_rev_numbers)
         
-        make_wordtable(data)
+        make_wordtable(data, max_words = table_max_words)
     })
     
     output$ngram_valShift_wordcloud <- renderHighchart({
@@ -764,7 +744,7 @@ shinyServer(function(input, output) {
         data <- form_ngrams(data, ngram_length = ngram_length, sep = wordcloud_sep)
         data <- get_word_counts(data, bind_rev_numbers = FALSE)
         
-        make_wordcloud(data, monochrome = monochrome, max_words_disp = max_words_disp) 
+        make_wordcloud(data, monochrome = monochrome, max_words = wordcloud_max_words) 
     })
     
     output$ngram_polarity_table <- renderDataTable({
@@ -783,7 +763,7 @@ shinyServer(function(input, output) {
         data <- form_ngrams(data, ngram_length = ngram_length, sep = table_sep)
         data <- get_word_counts(data, bind_rev_numbers = bind_rev_numbers)
         
-        make_wordtable(data)
+        make_wordtable(data, max_words = table_max_words)
     })
     
     output$ngram_polarity_wordcloud <- renderHighchart({
@@ -802,7 +782,7 @@ shinyServer(function(input, output) {
         data <- form_ngrams(data, ngram_length = ngram_length, sep = wordcloud_sep)
         data <- get_word_counts(data, bind_rev_numbers = FALSE)
         
-        make_wordcloud(data, monochrome = monochrome, max_words_disp = max_words_disp) 
+        make_wordcloud(data, monochrome = monochrome, max_words = wordcloud_max_words) 
     })
     
     # -------- END SENTIMENT ANALYSIS -------
@@ -838,69 +818,88 @@ shinyServer(function(input, output) {
         num_clusters <- isolate(input$num_clusters)
         
         col_name <- paste("y", cluster_method, num_clusters, sep = "_")
+        data <- cluster_data() %>% select(c("doc_id", "X1", "X2", col_name))
+        
+        # note: this currently uses the sentiment reactive which includes valence shifters
+        data <- data %>% 
+            inner_join(rev_sentiment() %>% select(doc_id, doc), by = "doc_id") %>%
+            inner_join(rev() %>% select(rev_id, name, title, stars), by = c("doc_id" = "rev_id"))
 
-        hc <- hchart(cluster_data(), "scatter", hcaes(x = X1, y = X2, group = !!as.name(col_name)))
-        hc
+        hchart(data, "scatter", hcaes(x = X1, y = X2, group = !!as.name(col_name))) %>%
+            hc_xAxis(title = list(text = "")) %>%
+            hc_yAxis(title = list(text = "")) %>% 
+            hc_title(text = "A vector space of customer reviews") %>%
+            hc_subtitle(text = "Reviews have been embedded into 2D and axes represent these embedded values.") %>%
+            hc_tooltip(pointFormatter = JS("function() {return ('<b>Product:</b> ' + this.name + '<br>' +
+                                                                '<b>Title:</b> ' + this.title + '<br>' +
+                                                                '<b>Stars:</b> ' + this.stars + '<br>' +
+                                                                '<b>Words:</b> ' + this.doc);}")) %>%
+            hc_legend(title = list(text = "Cluster ID"))
     })
     
     output$cluster_size_dist <- renderHighchart({
         req(input$topic_button) # req() ensures that this code is only run after the button is clicked
         cluster_method <- isolate(input$cluster_method)
-        num_clusters <- isolate(input$num_clusters)
+        num_clusters <- as.numeric(isolate(input$num_clusters))
         
         col_name <- paste("y", cluster_method, num_clusters, sep = "_")
-        data <- cluster_data() %>% count(!!as.name(col_name))
+        data <- cluster_data() %>% count(!!as.name(col_name)) %>% ungroup()
         
-        hc <- hchart(data, "column", hcaes(x = !!as.name(col_name), y = n))
-        hc
+        # We don't need colors for this plot, but we'll use
+        data[["colors"]] <- as.vector(unlist(lapply(data[[col_name]], FUN = function(x){return(color_theme[x+1])})))
+        
+        hchart(data, "column", hcaes(x = !!as.name(col_name), y = n, color = colors)) %>%
+            hc_xAxis(title = list(text = "Cluster ID")) %>%
+            hc_yAxis(title = list(text = "Cluster size (# of reviews)")) %>% 
+            hc_title(text = "Number of reviews in each cluster") %>%
+            hc_subtitle(text = "Colors do not add any information, but are used to match the other figures.") %>%
+            hc_tooltip(crosshairs = TRUE, sort = TRUE, headerFormat = "", pointFormat = "<b> Cluster {point.x} </b> <br> {point.y}") %>%
+            hc_legend(enabled = FALSE)
     })
     
     output$cluster_size_ts <- renderHighchart({
         req(input$topic_button) # req() ensures that this code is only run after the button is clicked
         cluster_method <- isolate(input$cluster_method)
-        num_clusters <- isolate(input$num_clusters)
+        num_clusters <- as.numeric(isolate(input$num_clusters))
         agg_freq <- input$cluster_size_ts_agg_freq
         smoothing <- as.integer(input$cluster_size_ts_smoothing)
         
         data <- cluster_data() %>% inner_join(rev() %>% select(c("rev_id", agg_freq)), by = c("doc_id" = "rev_id"))
         col_name <- paste("y", cluster_method, num_clusters, sep = "_")
-        data <- data %>% group_by(!!as.name(agg_freq)) %>% count(!!as.name(col_name)) %>% ungroup()
+        data <- data %>% group_by(!!as.name(col_name), !!as.name(agg_freq)) %>% summarize(n=n()) %>% ungroup()
         
         start <- rev_dateRange()[[agg_freq]]$start
         end <- rev_dateRange()[[agg_freq]]$end
-        data <- data %>% complete({{agg_freq}} := seq.Date(start, end, by=agg_freq), !!as.name(col_name), fill = list(n=0))
+        data <- data %>% 
+            complete({{agg_freq}} := seq.Date(start, end, by=agg_freq), !!as.name(col_name), fill = list(n=0))
         
-        hc <- highchart(type = "stock") 
+        series_list <- list()
         for (i in 0:(as.integer(num_clusters)-1)){
-            data_i <- data %>% filter(!!as.name(col_name) == i)
+            data_i <- data %>% filter(!!as.name(col_name) == i) %>% mutate(n = smooth_ts_data(n, p = smoothing))
             data_i <- as.xts(data_i$n, data_i[[agg_freq]]) 
-            hc <- hc %>% hc_add_series(data_i)
+            series_list <- c(series_list, list(data_i))
         }
-        hc <- hc %>%
-            hc_rangeSelector(buttons = list(
-                list(type = 'month', count = 6, text = '6m'),
-                list(type = 'ytd', text = 'YTD'),
-                list(type = 'year', count = 1, text = '1y'),
-                list(type = 'year', count = 2, text = '2y'),
-                list(type = 'all', text = 'All')
-            ))
-        hc
+        make_ts_plot(series_list = series_list,
+                     series_names = paste("Cluster",0:(num_clusters-1)),
+                     yLab = "Cluster size (# of reviews)", 
+                     title = paste("Cluster sizes per", agg_freq),
+                     tooltip = FALSE,
+                     formatter = JS(multiple_ts_tooltip))
     })
     
     output$topic_model_words <- renderDataTable({
         req(input$topic_button) # req() ensures that this code is only run after the button is clicked
         cluster_method <- isolate(input$cluster_method)
-        num_clusters <- isolate(input$num_clusters)
+        num_clusters <- as.numeric(isolate(input$num_clusters))
         brand <- input$brand_in
         
         df_name <- paste(brand, cluster_method, num_clusters, sep = "_")
-        cluster_words <- cluster_words_all[[df_name]]
-        
+        cluster_words <- as.data.frame(cluster_words_all[[df_name]])
+
         # note: the column names are originally numeric; however, R does not allow names to start with a number,
-        # so we convert the column names to c(c1,c2,c3,...)
-        cluster_words <- as.data.frame(cluster_words, col.names = paste0("c", names(cluster_words)))
-        
-        DT::datatable(cluster_words, options = list(scrollX = TRUE), rownames= FALSE)
+        # so we convert the column names to c(Cluster 1, Cluster 2, ...)
+        DT::datatable(cluster_words, selection = "none", options = list(searching = FALSE, paging = FALSE, bInfo = FALSE, ordering=F, scrollX = TRUE), 
+                      rownames = FALSE, colnames = paste("Cluster", 0:(num_clusters-1)) )
     })
     # ----------- END TOPIC MODELING -------------
     
@@ -922,9 +921,11 @@ shinyServer(function(input, output) {
         
         DT::datatable(data,
                       rownames = FALSE,
+                      colnames = c("", "Key", "Name", "Description", "Ingredients", "Number of reviews", "Average rating", "Rating st. dev.", "First review", "Last review"),
                       filter = "top",
                       selection = "none",
                       options = list(
+                          scrollX = TRUE,
                           order = list(2, "asc"),
                           drawCallback = JS("function() {
                           this.api().table().column(0).nodes().to$().css({'cursor': 'pointer', 'font-size': '18px' });
@@ -934,11 +935,24 @@ shinyServer(function(input, output) {
                               list(orderable = FALSE, className = 'details-control', targets = 0)
                           )
                       ),
-                      callback = js) %>% formatRound(c(7,8), 2) 
+                      callback = js_prod_table) %>% formatRound(c(7,8), 2) 
     })
     # ------------ END PRODUCT LEADERBOARD -----------
     
     # -------- PRODUCT TRENDS ----------
+    output$prod_trends_text <- renderUI({
+        data <- rev()
+        trends_month_range <- input$trends_month_range
+        last_date <- max(data$date)
+        split_date0 <- last_date - 2*months(trends_month_range)
+        split_date1 <- last_date - months(trends_month_range)
+        gp0_range <- c(split_date0, split_date1)
+        gp1_range <- c(split_date1, last_date)
+        
+        tags$p("You are comparing product performance from ", tags$b(gp1_range[1]), " to ", tags$b(gp1_range[2]), " (group 1) with 
+               product performance from ", tags$b(gp0_range[1]), " to ", tags$b(gp0_range[2]), " (group 0).")
+    })
+    
     output$prod_trends_table <- renderDataTable({
         data <- rev()
         trends_month_range <- input$trends_month_range
@@ -955,9 +969,10 @@ shinyServer(function(input, output) {
         
         # Encode date group 
         data <- data %>%
-            mutate(date_group = factor( case_when( ((gp0_range[1] < date)&(date <= gp0_range[2])) ~ 0,
-                                                   ((gp1_range[1]< date)&(date <= gp1_range[2])) ~ 1) )
-            )
+            mutate(date_group = case_when( ((gp0_range[1] < date)&(date <= gp0_range[2])) ~ 0,
+                                           ((gp1_range[1]< date)&(date <= gp1_range[2])) ~ 1)
+            ) %>% 
+            filter(date_group %in% 0:1)
         
         # Calculate summary statistics for each date group
         data <- data %>%
@@ -965,47 +980,65 @@ shinyServer(function(input, output) {
             summarize(n = n(), 
                       mean_rating = mean(stars),
                       sd_rating=sd(stars)) %>%
-            ungroup() 
+            ungroup()
         
-        # If a product has no reviews AT ALL, it won't appear. Let's add these to our dataset -- initializing with NAs
-        missing <- setdiff(prod()$key, data$key)
-        data <- data %>% bind_rows(data.frame(key = missing))
+        # Fill values for products that have no reviews in either or both time windows (or no reviews AT ALL)
+        data <- data %>% complete(key = prod()$key, date_group, fill = list(n = 0, mean_rating = NA, sd_rating = NA))
         
-        # Fill values for products that have no reviews in either or both time windows, but does have at least
-        data <- data %>% 
-            complete(key, date_group, fill = list(n = 0, mean_rating = NA, sd_rating = NA)) %>%
-            drop_na(date_group)
-        
-        # If only 1 review, sd returns NA but it is more appropriate to say sd = 0
+        # If only 1 review, sd returns NA because it uses (n-1) denominator; however it is appropriate to say sd = 0.
         data <- data %>% mutate(sd_rating = case_when(n == 1 ~ 0, TRUE ~ sd_rating))
         
-        data <- inner_join(data %>% filter(date_group == 0) %>% select(-date_group), 
-                           data %>% filter(date_group == 1) %>% select(-date_group), 
-                           by = "key", suffix = c(".0", ".1"))
+        # Convert data to wide format. Suffixes are _0 and _1, e.g. n_0, n_1, mean_rating_0...
+        data <- data %>% pivot_wider(id_cols = key, 
+                                     names_from = date_group, 
+                                     values_from = c("n", "mean_rating", "sd_rating"))
         
-        stats <- c("n", "mean_rating", "sd_rating")
-        cols <- c("key")
+        
+        # Format datatable based on user input. Calculate differences & pct difference if user chooses.
+        # stats <- c("n", "mean_rating", "sd_rating")
+        stats <- c("n", "mean_rating")
+        cols <- c("key") # columns for datatable
         round_to <- 3
         for (stat in stats){
-            # always include n.0 and n.1 even if user does not want raw values for mean & sd
-            if (("value" %in% trends_column_options) | (stat == "n")){
-                col0 <- paste0(stat, ".0")
-                col1 <- paste0(stat, ".1")
+            if (("value" %in% trends_column_options)){
+                col0 <- paste0(stat, "_0")
+                col1 <- paste0(stat, "_1")
+                # round non-null values only
                 data[!is.na(data[[col0]]), col0] <- round(data[!is.na(data[[col0]]), col0], round_to)
                 data[!is.na(data[[col1]]), col1] <- round(data[!is.na(data[[col1]]), col1], round_to)
-                cols <- c(cols, paste0(stat, c(".0", ".1")))
+                cols <- c(cols, paste0(stat, c("_0", "_1")))
             }
             if ("diff" %in% trends_column_options){
-                data[[paste0(stat, "_diff")]] <- round(data[[paste0(stat, ".1")]] - data[[paste0(stat, ".0")]], round_to) # difference
+                data[[paste0(stat, "_diff")]] <- round(data[[paste0(stat, "_1")]] - data[[paste0(stat, "_0")]], round_to) # difference
                 cols <- c(cols, paste0(stat, "_diff"))
             }
             if ("rel" %in% trends_column_options){
-                data[[paste0(stat, "_rel")]] <- round((data[[paste0(stat, ".1")]] - data[[paste0(stat, ".0")]])/data[[paste0(stat, ".0")]], round_to) # percent change
+                data[[paste0(stat, "_rel")]] <- round((data[[paste0(stat, "_1")]] - data[[paste0(stat, "_0")]])/data[[paste0(stat, "_0")]], round_to) # percent change
                 cols <- c(cols, paste0(stat, "_rel"))
             }
         }
+        data <- data[,cols] %>% 
+            right_join(prod()[,c("key", "name", "description", "ingredients")], by = "key") # right join so that if a product has 0 reviews it will still be kept in the datatable
         
-        DT::datatable(data[,cols])
+        data <- data[,c("key","name","description","ingredients",setdiff(cols,"key"))]
+        data <- cbind(' ' = '\u2295', data)
+        
+        DT::datatable(data,
+                      rownames = FALSE,
+                      filter = "top",
+                      selection = "none",
+                      options = list(
+                          scrollX = TRUE,
+                          order = list(2, "asc"),
+                          drawCallback = JS("function() {
+                          this.api().table().column(0).nodes().to$().css({'cursor': 'pointer', 'font-size': '18px' });
+                          }"),
+                          columnDefs = list(
+                              list(visible = FALSE, targets = c(1,3,4)),
+                              list(orderable = FALSE, className = 'details-control', targets = 0)
+                          )
+                      ),
+                      callback = js_prod_table) %>% formatRound(5:ncol(data), 2) 
     })
     # ----------- END PRODUCT TRENDS -----
     
@@ -1055,7 +1088,7 @@ shinyServer(function(input, output) {
         key2 <- input$prod_2
         shiny::validate(need(key1 != key2, message = "Choose two different products"))
         
-        imgSrc <- paste0("www/", key1, ".png")
+        imgSrc <- paste0(PATH_TO_IMAGES, key1, ".png")
         
         list(src = imgSrc, width="170", height="170", alt="brand image")
     }, deleteFile = FALSE)
@@ -1072,7 +1105,7 @@ shinyServer(function(input, output) {
         shiny::validate(need(key1 != key2, message = "Choose two different products"))
         
         if (key2 == "all"){
-            imgSrc <- paste0("www/logo ", input$brand_in)
+            imgSrc <- paste0(PATH_TO_IMAGES, "logo ", input$brand_in)
             if (input$brand_in %in% c("bj", "hd")){
                 imgSrc <- paste0(imgSrc, ".png")
             }
@@ -1081,7 +1114,7 @@ shinyServer(function(input, output) {
             }
         }
         else {
-            imgSrc <- paste0("www/", key2, ".png")
+            imgSrc <- paste0(PATH_TO_IMAGES, key2, ".png")
         }
         
         list(src = imgSrc, width="170", height="170", alt="brand image")
@@ -1105,12 +1138,19 @@ shinyServer(function(input, output) {
         data <- data %>% 
             mutate(prod_group = case_when(key == key1 ~ 1, TRUE ~ 2)) %>%
             group_by(prod_group) %>%
-            summarise(n = n(), mean_rating = mean(stars), sd_rating = sd(stars), first_review=min(date), last_review = max(date)) %>%
+            summarise(n = n(), 
+                      mean_rating = round(mean(stars), 2), 
+                      sd_rating = round(sd(stars), 2), 
+                      first_review = min(date), 
+                      last_review = max(date)) %>%
             ungroup() %>%
             select(-prod_group) %>%
             t()
         
-        DT::datatable(data, options = list(searching = FALSE, paging = FALSE, bInfo = FALSE, ordering=F), colnames = c("Statistic", "Product 1", "Product 2"))
+        DT::datatable(data, options = list(searching = FALSE, paging = FALSE, bInfo = FALSE, ordering=F), 
+                      selection = "none",
+                      colnames = c("Statistic", "Product 1", "Product 2"),
+                      rownames = c("Number of reviews", "Average rating", "Rating st. dev.", "First review", "Last review"))
     })
     
     output$prod_comp_dist <- renderHighchart({
@@ -1128,7 +1168,7 @@ shinyServer(function(input, output) {
         if (key2 != "all"){
             data <- data %>% filter(key %in% c(key1, key2)) 
         }
-        data <- data %>% mutate(prod_group = case_when(key == key1 ~ 1, TRUE ~ 2))
+        data <- data %>% mutate(prod_group = case_when(key == key1 ~ "Product 1", TRUE ~ "Product 2"))
         
         data <- data %>% 
             group_by(prod_group, stars) %>% 
@@ -1137,7 +1177,15 @@ shinyServer(function(input, output) {
             ungroup() %>%
             complete(stars, prod_group, fill = list(n = 0))
         
-        hchart(data, type = "column", hcaes(x = stars, group = prod_group, y = n))
+        # this isn't needed, but it if stars is treated as numeric then crosshair is a "line" rather than "area"
+        # which contrasts the crosshair behavior in the sentiment plot
+        data <- data %>% mutate(stars = as.factor(stars))
+        
+        hchart(data, type = "column", hcaes(x = stars, y = n, group = prod_group)) %>%
+            hc_xAxis(title = list(text = "Star rating")) %>%
+            hc_yAxis(title = list(text = "Fraction of reviews")) %>% 
+            hc_title(text = "Distribution of star ratings") %>%
+            hc_tooltip(crosshairs = TRUE, shared = TRUE)
     })
     
     output$prod_comp_ts <- renderHighchart({
@@ -1167,34 +1215,24 @@ shinyServer(function(input, output) {
             mutate(n = n/sum(n)) %>%
             ungroup()
         
-        start <- min(data[[agg_freq]])
-        end <- max(data[[agg_freq]])
+        start <- rev_dateRange()[[agg_freq]]$start
+        end <- rev_dateRange()[[agg_freq]]$end
         data <- data %>% complete( {{agg_freq}} := seq.Date(start, end, by=agg_freq), prod_group, fill = list(n=0))
         
-        x1 <- data %>% filter(prod_group == 1)
-        x2 <- data %>% filter(prod_group == 2)
-        
-        
-        if (smoothing > 0){
-            x1 <- x1 %>% mutate({{stat}} := smooth_ts_data(!!as.name(stat), p = smoothing))
-            x2 <- x2 %>% mutate({{stat}} := smooth_ts_data(!!as.name(stat), p = smoothing))
-        }
+        x1 <- data %>% filter(prod_group == 1) %>% mutate({{stat}} := smooth_ts_data(!!as.name(stat), p = smoothing))
+        x2 <- data %>% filter(prod_group == 2) %>% mutate({{stat}} := smooth_ts_data(!!as.name(stat), p = smoothing))
         
         x1 <- as.xts(x1[[stat]], x1[[agg_freq]]) 
         x2 <- as.xts(x2[[stat]], x2[[agg_freq]]) 
         
-        stat_label <- switch(stat, "n" = "Review count", "mean_rating" = "Mean rating")
-        agg_label <- switch(agg_freq, "month" = "Month", "week" = "Week")
-        highchart(type = "stock") %>%
-            hc_add_series(x1, marker = list(enabled = TRUE)) %>%
-            hc_add_series(x2, marker = list(enabled = TRUE)) %>%
-            hc_rangeSelector( buttons = list(
-                list(type = 'month', count = 6, text = '6m'),
-                list(type = 'ytd', text = 'YTD'),
-                list(type = 'year', count = 1, text = '1y'),
-                list(type = 'year', count = 2, text = '2y'),
-                list(type = 'all', text = 'All')
-            ))
+        stat_label <- switch(stat, "n" = "Fraction of reviews", "mean_rating" = "Average rating")
+        make_ts_plot(series_list = list(x1, x2), 
+                     series_names = paste("Product", 1:2),
+                     yLab = stat_label, 
+                     title = paste(stat_label, "per", agg_freq),
+                     marker = if (stat == "mean_rating") TRUE else FALSE,
+                     tooltip = FALSE,
+                     formatter = JS(multiple_ts_tooltip))
     })
     
     output$prod_comp_ngrams <- renderHighchart({
@@ -1218,31 +1256,15 @@ shinyServer(function(input, output) {
         }
         
         data <- data %>% mutate(group = case_when(key == key1 ~ "G1", TRUE ~ "G2"))
-        data <- get_word_comparison_data(data = data, top_words = top_words)
+        data <- get_word_comparison_data(data = data, max_words = barchart_max_words)
         
-        highchart() %>%
-            hc_add_series(data$G1, type = "bar", name = "Product 1") %>%
-            hc_add_series(data$G2, type = "bar", name = "Product 2") %>%
-            hc_xAxis(categories = data$categories,
-                     labels = list(step = 1),
-                     plotLines = list(
-                         list(color = "#000000",
-                              width = 2,
-                              value = top_words - 0.5)
-                     )) %>%
-            hc_plotOptions(series = list(stacking = "normal")) %>%
-            hc_yAxis(
-                labels = list(
-                    formatter = JS("function(){return Math.abs(this.value);}")
-                )
-            ) %>%
-            hc_tooltip(
-                shared = FALSE,
-                formatter = JS("function () {
-            return this.point.category + '<br/>' + 
-            '<b>' + this.series.name + '</b> ' + 
-            Highcharts.numberFormat(Math.abs(this.point.y), 1);}")
-            )
+        make_word_comparison_barchart(x1 = data$G1,
+                                      name1 = "Product 1",
+                                      x2 = data$G2, 
+                                      name2 = "Product 2", 
+                                      categories = data$categories,
+                                      xLab = "Difference in N-gram frequency (Prod 2. - Prod. 1)",
+                                      max_words = barchart_max_words)
     })
     
     output$prod_comp_sentiment <- renderHighchart({
@@ -1261,48 +1283,34 @@ shinyServer(function(input, output) {
         if (key2 != "all"){
             data <- data %>% filter(key %in% c(key1, key2)) 
         }
-        data <- data %>% mutate(prod_group = case_when(key == key1 ~ 1, TRUE ~ 2))
+        data <- data %>% mutate(prod_group = case_when(key == key1 ~ "Product 1", TRUE ~ "Product 2"))
         
+        # Get word counts
         data <- data %>% 
             group_by(prod_group, word) %>% 
             summarize(n = n()) %>%
             ungroup() %>%
             complete(prod_group, word, fill = list(n = 0))
         
+        # Join with sentiment types from get_sentiments("nrc").
+        # Note: we've chosen to normalize after joining. After the inner join, words without sentiment types will be dropped, 
+        # so our normalized frequencies represent frequencies of all recognized "sentiment words" rather than of all words.
+        # This ensures that the heights of the bars for each group sum to 1. An alternative way would be to normalize before,
+        # do a left-join, and rename "NA" to "Other/Unrecognized", for a total of 13 bars rather than 12.
         nrc_sent <- get_sentiments("nrc")
         data <- data %>% 
             inner_join(nrc_sent, by = "word") %>% 
             group_by(prod_group, sentiment) %>% 
             summarize(n_sent=sum(n)) %>% 
-            mutate(n_sent = n_sent/sum(n_sent)) %>%
+            mutate(n_sent = n_sent/sum(n_sent)) %>% 
             ungroup()
         
-        hc <- hchart(data, type = "column", hcaes(x = sentiment, group = prod_group, y = n_sent))
-        # hc <- highchart() %>% 
-        #     hc_chart(polar = TRUE) %>% 
-        #     hc_title(text = "Sentiment types") %>% 
-        #     hc_xAxis(categories = unique(data$sentiment),
-        #              tickmarkPlacement = "on",
-        #              lineWidth = 0) %>% 
-        #     hc_yAxis(gridLineInterpolation = "polygon",
-        #              lineWidth = 0,
-        #              min = 0) %>% 
-        #     hc_series(
-        #         list(
-        #             name = "Product 1",
-        #             data = data %>% filter(prod_group == 1) %>% .$n_sent,
-        #             pointPlacement = "on",
-        #             type = "area"
-        #         ),
-        #         list(
-        #             name = "Product 2",
-        #             data = data %>% filter(prod_group == 2) %>% .$n_sent,
-        #             pointPlacement = "on",
-        #             type = "area"
-        #         )
-        #     )
-        hc
+        hchart(data, type = "column", hcaes(x = sentiment, y = n_sent, group = prod_group)) %>%
+            hc_xAxis(title = list(text = "Sentiment type")) %>%
+            hc_yAxis(title = list(text = "Fraction of words")) %>% 
+            hc_title(text = "Distribution of sentiment types") %>%
+            hc_tooltip(crosshairs = TRUE, shared = TRUE)
+    
     })
     # ---------- END PRODUCT COMPARISON -------
 })
-

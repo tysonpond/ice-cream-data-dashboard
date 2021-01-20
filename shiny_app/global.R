@@ -30,10 +30,16 @@ library(stringr) # str_squish()
 
 library(colorspace) # for defining fading color scheme for wordclouds
 
-# change these locations if you change file organization
-setwd("C:/Users/tysonp/Desktop/data-science-projects/ice-cream-data-dashboard/shiny_app")
-prod_all <- read.csv("../data/ice-cream-dataset-v2/combined/products.csv", encoding = "UTF-8")
-rev_all <- read.csv("../data/ice-cream-dataset-v2/combined/reviews.csv", encoding = "UTF-8")
+# Change these locations if you change file organization
+# Note: must manually change PATH_TO_IMAGE in `js_prod_table` and `js_sentiment_table` below because string interpolation in R
+# is inconvenient.
+# setwd("C:/Users/tysonp/Desktop/data-science-projects/ice-cream-data-dashboard/shiny_app")
+PATH_TO_APPDATA <- "www/appdata/"
+PATH_TO_IMAGES <- "www/images/"
+
+# Main dataset -- from ice-cream-dataset-v2+
+prod_all <- read.csv(paste0(PATH_TO_APPDATA, "products.csv"), encoding = "UTF-8")
+rev_all <- read.csv(paste0(PATH_TO_APPDATA, "reviews.csv"), encoding = "UTF-8")
 rev_all <- rev_all %>% mutate(rev_id = row_number())
 
 # Review counts in product dataset do not always match number of reviews in reviews dataset. Correct this
@@ -43,38 +49,50 @@ prod_all <- rev_all %>%
         ungroup() %>%
         right_join(prod_all %>% select(-c("rating_count", "rating")))
 
-# Topic modeling
-cluster_data_all <- read.csv("../data/clustering/cluster_labelings.csv", encoding = "UTF-8")
-cluster_words_all <- fromJSON("../data/clustering/cluster_words.json")
+# Data for topic modeling
+cluster_data_all <- read.csv(paste0(PATH_TO_APPDATA, "cluster_labelings.csv"), encoding = "UTF-8")
+cluster_words_all <- fromJSON(paste0(PATH_TO_APPDATA, "cluster_words.json"))
 
-# -------- Highcharter theme & global options ---------
+# -------- GLOBAL OPTIONS & HIGHCHARTER THEME ---------
 iconsize <- "fa-1x" # sidebar icon size
 
 # WORD TABLES
 table_sep <- " " # character to separate bigrams/trigrams in table view
 bind_rev_numbers <- TRUE # whether or not to calculate "helpfulness" and "rating" of each word by joining with review stats 
+table_max_words <- 1000
 
 # WORDCLOUDS
 wordcloud_sep <- "_" # character to separate bigrams/trigrams in wordcloud view
 monochrome <- TRUE # controls wordcloud coloring. If FALSE, default is to randomly choose colors from getOptions(highcharter.theme)$colors.
-max_words_disp <- 50 # maximum words to display in wordclouds
+wordcloud_max_words <- 50 # maximum words to display in wordclouds
 
 # WORD BARCHARTS
-top_words <- 10 # number of words to display in n-gram comparison barcharts
+barchart_max_words <- 10 # number of words to display in n-gram comparison barcharts
 
 # COLORS & HIGHCHARTS OPTIONS
-google_thm <- hc_theme_google()
-tableau_cols <- c("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf")
-primary_col <- tableau_cols[1]
-google_thm$colors <- tableau_cols
-google_thm$xAxis$title$style$fontSize <- '18px'
-google_thm$yAxis$title$style$fontSize <- '18px'
-options(highcharter.theme = google_thm)
+# Default thousands separator is a space, which (in my opinion) looks confusing.
+hcoptslang <- getOption("highcharter.lang")
+hcoptslang$thousandsSep <- "," 
+options(highcharter.lang = hcoptslang)
+
+# Colors and other plot settings
+hctheme <- hc_theme_google()
+color_theme <- c("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf")
+primary_col <- color_theme[1]
+hctheme$colors <- color_theme
+hctheme$title$align <- 'left' # title position
+hctheme$subtitle$align <- 'left' # title position
+hctheme$title$style$fontSize <- '18px' # title font size
+hctheme$subtitle$style$fontSize <- '16px' # subtitle font size
+hctheme$xAxis$title$style$fontSize <- '16px' # x label font size
+hctheme$yAxis$title$style$fontSize <- '16px' # y label font size
+hctheme$yAxis$opposite <- FALSE # If TRUE, time series "stock" graphs will place y ticks and y label on right side.
+options(highcharter.theme = hctheme)
 # -------------- END GLOBAL OPTIONS -----------------
 
-# --------- UI components ---------
+# --------- UI COMPONENTS ---------
 # Time series inputs (aggregation frequency, statistic (for brand overview & product comparison), and smoothing)
-ts_UI <- function(inputId, with_stat = FALSE){
+ts_UI <- function(inputId, with_stat = FALSE, smoothing_choice = 0){
         UI <- tagList(radioButtons(inputId = paste0(inputId, "_ts_agg_freq"),
                                    label = "Aggregation frequency",
                                    choices = list("Monthly" = "month",
@@ -85,8 +103,8 @@ ts_UI <- function(inputId, with_stat = FALSE){
                 UI <- tagList(UI, 
                               radioButtons(inputId = paste0(inputId, "_ts_stat"),
                                            label = "Statistic",
-                                           choices = list("Review count" = "n",
-                                                          "Mean rating" = "mean_rating"),
+                                           choices = list("Number of reviews" = "n",
+                                                          "Average rating" = "mean_rating"),
                                            selected = "n",
                                            inline = TRUE)
                         )
@@ -95,12 +113,14 @@ ts_UI <- function(inputId, with_stat = FALSE){
                 selectInput(inputId = paste0(inputId, "_ts_smoothing"),
                             label = "Smoothing",
                             choices = 0:6,
-                            selected = 3)
+                            selected = smoothing_choice)
                 )
         return(UI)
 }
+# ---------- END UI COMPONENTS --------------
 
 
+# ----------- UTILITIES --------------
 smooth_ts_data <- function(x,p){
         # This function implements the smoothing method used by Google N-gram Viewer (https://books.google.com/ngrams/info).
         # For each value of the time series, the smoothed value is obtained by averaging the value plus its `p` prior and `p` subsequent values. 
@@ -263,7 +283,7 @@ filter_ngrams_pos <- function(data, ngram_length, valid_pos){
         return(data_n)
 }
 
-get_word_comparison_data <- function(data, top_words = 10){
+get_word_comparison_data <- function(data, max_words = 10){
         data <- data %>% 
                 group_by(group, word) %>% 
                 summarize(n = n()) %>%
@@ -274,12 +294,12 @@ get_word_comparison_data <- function(data, top_words = 10){
                 mutate(diff = G2 - G1)
         
         G2_data <- data %>% 
-                slice_max(n = top_words, order_by = diff, with_ties = FALSE) %>%
+                slice_max(n = max_words, order_by = diff, with_ties = FALSE) %>%
                 select(word, diff)
         
         G1_data <- data %>% 
                 arrange(desc(diff)) %>%
-                slice_tail(n = top_words) %>%
+                slice_tail(n = max_words) %>%
                 select(word, diff)
         
         G2_data2 <- rbind(G2_data, data.frame(word = G1_data$word, diff=rep(0, nrow(G1_data))))
@@ -321,16 +341,22 @@ get_word_counts <- function(data, bind_rev_numbers = TRUE){
         data
 } 
 
-make_wordtable <- function(data){
-        DT::datatable(data, options = list(order=list(1, "desc")), rownames= FALSE, filter = "top")
+make_wordtable <- function(data, max_words = FALSE){
+        if (is.numeric(max_words)){
+                data <- data %>% slice_max(order_by = n, n = max_words, with_ties = FALSE)
+        }
+        DT::datatable(data, selection = "none", options = list(order=list(1, "desc")), rownames= FALSE, filter = "top")
 }
 
-make_wordcloud <- function(data, monochrome = TRUE, max_words_disp = 10){
+make_wordcloud <- function(data, monochrome = TRUE, max_words = 50){
         data <- data %>% 
                 mutate(freq = log10(n)) %>%
-                slice_max(order_by = freq, n = max_words_disp, with_ties = FALSE)
+                slice_max(order_by = freq, n = max_words, with_ties = FALSE)
         
         if (monochrome){
+                # A somewhat arbitrary colormap
+                # low exponent --> slow fade (most words are easily seen)
+                # high exponent --> fast fade (only first few words are easily seen)
                 data$c <- unlist(lapply(1-(data$freq/max(data$freq))^2 , FUN = function(x) lighten(primary_col, amount = x)))   
                 hc <- hchart(data, "wordcloud", hcaes(name = word, weight = freq, color = c))
         } else {
@@ -399,14 +425,14 @@ process_group_query <- function(data, group_query, agg_freq, normalization, star
         data
 }
 
-js <- JS("
+js_prod_table <- JS("
         var format = function(d) {
         return '<div style=\"background-color:#eee; padding: .5em;\">' +
                '<h3>' + d[2] + '</h3>' +
                '<p>' + d[3] + '</p>' +
                '<h4> Ingredients: </h4>' +
                '<p>' + d[4] + '</p>' +
-               '<img src=\"' + d[1] + '.png\" width=200 height=200> </div>';
+               '<img src=\"images/' + d[1] + '.png\" width=200 height=200> </div>';
         };
         table.on('click', 'td.details-control', function() {
         var td = $(this), row = table.row(td.closest('tr'));
@@ -419,3 +445,164 @@ js <- JS("
         }
         });
         ")
+
+js_sentiment_table <- JS("
+        var format = function(d) {
+        return '<div style=\"background-color:#eee; padding: .5em;\">' +
+               '<h3>' + d[1] + '</h3>' +
+               '<h4> Review text: </h4>' +
+               '<p>' + d[2] + '</p>' +
+               '<h4> Words extracted: </h4>' +
+               '<p>' + d[3] + '</p>';
+        };
+        table.on('click', 'td.details-control', function() {
+        var td = $(this), row = table.row(td.closest('tr'));
+        if (row.child.isShown()) {
+          row.child.hide();
+          td.html('\u2295');
+        } else {
+          row.child(format(row.data())).show();
+          td.html('\u2296');
+        }
+        });
+        ")
+
+
+# Make times series plots. A slightly quicker pipeline, with just the options we need.
+# If any argument is left as FALSE then it takes on its default behavior.
+make_ts_plot <- function(series_list, series_names = FALSE, xLab = FALSE, xFmt = "{value:%b. \'%y}", yLab = FALSE, yFmt = FALSE, title = FALSE, 
+                         tooltip = "<b> {point.x:%b. %e, \'%y} </b> <br> {point.y}", formatter = FALSE, marker = FALSE){
+        hc <- highchart(type = "stock") %>% 
+                hc_rangeSelector(buttons = list(
+                        list(type = 'month', count = 6, text = '6m'),
+                        list(type = 'ytd', text = 'YTD'),
+                        list(type = 'year', count = 1, text = '1y'),
+                        list(type = 'year', count = 2, text = '2y'),
+                        list(type = 'all', text = 'All')
+                ))
+        for (i in 1:length(series_list)){
+                if (!is.logical(series_names)){
+                        hc <- hc %>% hc_add_series(series_list[[i]], name = series_names[i], marker = list(enabled = marker))
+                } else {
+                        hc <- hc %>% hc_add_series(series_list[[i]], marker = list(enabled = marker)) 
+                }
+                
+        }
+        xOpts <- c(if (is.character(xLab)) list(title = list(text = xLab)) else list(), 
+                   if (is.character(xFmt)) list(labels = list(format = xFmt)) else list())
+        if (length(xOpts) > 0){
+                hc <- hc %>% hc_xAxis(xOpts)
+        }
+        yOpts <- c(if (is.character(yLab)) list(title = list(text = yLab)) else list(), 
+                   if (is.character(yFmt)) list(labels = list(format = yFmt)) else list())
+        if (length(yOpts) > 0){
+                hc <- hc %>% hc_yAxis_multiples(yOpts) # note the use of yAxis_multiples (https://github.com/jbkunst/highcharter/issues/79)
+        }
+        if (is.character(title)){
+                hc <- hc %>% hc_title(text = title)
+        }
+        if (is.character(tooltip)){
+                hc <- hc %>% hc_tooltip(headerFormat = "", pointFormat = tooltip)
+        } else {
+                if (is.character(formatter)){
+                        hc <- hc %>% hc_tooltip(formatter = formatter, shared = FALSE, crosshairs = FALSE, split = FALSE)    
+                }
+        }
+        hc
+}
+
+make_word_comparison_barchart <- function(x1, name1, x2, name2, categories, xLab, max_words = 10){
+        highchart() %>%
+                hc_add_series(x1, type = "bar", name = name1) %>%
+                hc_add_series(x2, type = "bar", name = name2) %>%
+                hc_xAxis(categories = categories,
+                         labels = list(step = 1),
+                         plotLines = list(
+                                 list(color = "#808080",
+                                      width = 1,
+                                      value = max_words - 0.5,
+                                      zIndex = 10)
+                         )) %>%
+                hc_yAxis(title = list(text = xLab), # we use xLab here because it LOOKS like the x-axis. It's hard to remember the axes are inverted.
+                         plotLines = list(
+                                 list(color = "#808080",
+                                      width = 1,
+                                      value = 0,
+                                      zIndex = 10)
+                         )) %>%
+                hc_title(text = "N-gram usage comparison chart") %>%
+                hc_plotOptions(series = list(stacking = "normal")) %>%
+                hc_tooltip(
+                        headerFormat = "",
+                        pointFormat = "<b> {point.category} </b> <br> {point.y:.5f}"
+                )
+}
+
+multiple_ts_tooltip <- "function() {
+        var series = this.series.chart.series,
+                point = this.point,
+                s = '<span style=\"font-size: 10px\">' + Highcharts.dateFormat('%b. %e, %y', this.key) + '</span><br/>',
+                tmp;
+
+            $.each(series, function(i, serie){
+                if (serie.name != 'Navigator 1'){
+                        dot = '<span style=\"color:' + serie.color + '\">\u25CF</span> ';
+                        var serieData = serie.data;
+                        for (var j = 0; j < serieData.length; j++){
+                                if (serieData[j].x == point.x){
+                                        var idx = j;
+                                }
+                        }
+                        tmp = serie.name + ': ' + (serieData[idx].y != null ? serieData[idx].y : 'NA');
+        
+                        if( serie.index === point.series.index )
+                            tmp = '<b>' + tmp + '</b>';
+                        
+                        s += '<br/>' + dot + ' ' + tmp;
+                }  
+            });
+            
+            return s;
+        }"
+
+
+# Scrap work for plotting time series & formatting tooltip
+# https://community.rstudio.com/t/highcharter-shared-tooltip-bolding-currently-hovered-series/30871/2
+# my_tooltip <- "function() {
+#             var series = this.series.chart.series,
+#                 point = this.point,
+#                 s = '<span style=\"font-size: 10px\">' + this.key + '</span><br/>',
+#                 tmp;
+# 
+#             $.each(series, function(i, serie){
+#                 dot = '<span style=\"color:' + serie.color + '\">\u25CF</span> '
+#                 tmp = serie.data[point.x].series.name + ': ' + serie.data[point.x].y + 'm';
+# 
+#                 if( serie.index === point.series.index )
+#                     tmp = '<b>' + tmp + '</b>';
+#                 
+#                 s += '<br/>' + dot + ' ' + tmp;
+#             });
+#             
+#             return s;
+#         }"
+# highcharts_demo() %>% 
+#         hc_tooltip(formatter = JS(my_tooltip), shared = FALSE)
+# 
+# data <- rev_all %>% 
+#         mutate(date = as.Date(date)) %>% 
+#         mutate(month = floor_date(date, "month")) %>% 
+#         count(month, brand) %>%
+#         ungroup() %>%
+#         complete(month = seq.Date(min(month), max(month), by = "month"), brand, fill = list(n=0))
+# hchart(data, "line", hcaes(x = month, y = n, group = brand), marker = list(enabled = FALSE)) %>%
+#         hc_xAxis(crosshair = TRUE) %>% hc_tooltip(shared=TRUE)
+# hchart(data, "line", hcaes(x = month, y = n, group = brand), marker = list(enabled = FALSE)) %>%
+#         hc_tooltip(formatter = JS(multiple_ts_tooltip))
+# hc <- highchart(type = "stock")
+# for (b in unique(data$brand)){
+#         x <- data %>% filter(brand == b)
+#         hc <- hc %>% hc_add_series(as.xts(x$n, x$month), name = b)
+# }
+# hc
+# ------------ END UTILITIES -------------

@@ -45,7 +45,7 @@ dashboardPage(
         shinyjs::useShinyjs(),
         tags$head(
             # By default, there is either no limit or a really large limit on textInput character length. We'll limit this using javascript.
-            # By default, switching tabs does not scroll to top. This is a fix.
+            # Also by default, switching tabs does not scroll to top. This is a fix.
             tags$script("$(document).ready(function () {
             $('input[type=\"text\"][id^=\"group\"]').attr('maxlength', 100);
          $('a[data-toggle=\"tab\"]').bind('click', function (e) {
@@ -105,16 +105,17 @@ dashboardPage(
                 tags$h2("Ratings"),
                 highchartOutput("overview_dist"),
                 tags$h2("Rating trends"),
-                ts_UI(inputId = "overview", with_stat = TRUE),
+                ts_UI(inputId = "overview", with_stat = TRUE, smoothing_choice = 0),
                 highchartOutput("overview_ts"),
                 tags$h2("Ratings by product"),
                 radioButtons(inputId = "overview_by_prod_stat",
                              label = "Statistic",
-                             choices = c("Review count" = "rating_count", "Mean rating" = "rating"),
-                             selected = "rating_count",
+                             choices = c("Number of reviews", "Average rating"),
+                             selected = "Number of reviews",
                              inline = TRUE),
                 highchartOutput("overview_by_prod")
-            ), # end tab item
+            ), 
+            
             tabItem(tabName = "settings",
                     fluidRow(
                         box(width=12,
@@ -174,6 +175,7 @@ dashboardPage(
                         )
                     ),
             ),
+            
             tabItem(tabName = "basic-stats",
                     tags$h1("Basic statistics"),
                     tags$h2("Word counts"),
@@ -205,6 +207,7 @@ dashboardPage(
                                 inline = TRUE),
                     highchartOutput("rank_freq_wordcloud")
                     ),
+            
             tabItem(tabName = "words",
                     tags$h1("Word insights"),
                     selectInput(inputId = "ngram_length",
@@ -234,7 +237,7 @@ dashboardPage(
                     textInput(inputId = "group3",
                               label = "Group 3",
                               value = "expensive, pricey"),
-                    ts_UI(inputId = "ngram", with_stat = FALSE),
+                    ts_UI(inputId = "ngram", with_stat = FALSE, smoothing_choice = 3),
                     actionButton("ngram_button", "Update"),
                     highchartOutput("ngram_tracker"),
                     tags$h2("Noun-adjective coocurrences"),
@@ -253,6 +256,7 @@ dashboardPage(
                     conditionalPanel('input.words_display_method=="Table"', dataTableOutput("dep_parse_table")),
                     conditionalPanel('input.words_display_method=="Wordcloud"', highchartOutput("dep_parse_wordcloud"))
                     ),
+            
             tabItem(tabName = "sentiment",
                     tags$h1("Sentiment analysis"),
                     tags$h2("Common sentiments"),
@@ -264,7 +268,7 @@ dashboardPage(
                     tags$h2("Sentiment and star rating"),
                     highchartOutput("sent_dist_by_stars"),
                     tags$h2("Sentiment trends"),
-                    ts_UI("sent", with_stat = FALSE),
+                    ts_UI("sent", with_stat = FALSE, smoothing_choice = 3),
                     highchartOutput("sent_ts"),
                     tags$h2("Sentimental N-grams"),
                     selectInput(inputId = "ngram_length_valShift",
@@ -298,6 +302,7 @@ dashboardPage(
                     conditionalPanel('input.words_display_method=="Table"', dataTableOutput("ngram_polarity_table")),
                     conditionalPanel('input.words_display_method=="Wordcloud"', highchartOutput("ngram_polarity_wordcloud"))
                     ),
+            
             tabItem(tabName = "topic-model",
                     tags$h1("Topic modeling"),
                     selectInput(inputId = "cluster_method",
@@ -313,14 +318,16 @@ dashboardPage(
                     tags$h2("Cluster sizes"),
                     highchartOutput("cluster_size_dist"),
                     tags$h2("Cluster sizes over time"),
-                    ts_UI("cluster_size", with_stat = FALSE),
+                    ts_UI("cluster_size", with_stat = FALSE, smoothing_choice = 0),
                     highchartOutput("cluster_size_ts"),
                     tags$h2("Important words"),
                     dataTableOutput("topic_model_words")),
+            
             tabItem(tabName = "leaderboard",
                     tags$h1("Product leaderboard"),
                     DT::dataTableOutput("prod_leaderboard")
             ),
+            
             tabItem(tabName = "trends",
                     tags$h1("Product trends"),
                     sliderInput(inputId = "trends_month_range", 
@@ -329,34 +336,36 @@ dashboardPage(
                                 max = 12,
                                 value = 3, 
                                 step = 1),
+                    uiOutput("prod_trends_text"),
                     checkboxGroupInput(inputId = "trends_column_options",
-                                       label = "Metrics displayed",
-                                       choices = c("Values" = "value",
-                                                   "Raw increase" = "diff",
-                                                   "Percent increase" = "rel"),
+                                       label = "Metrics displayed (suffix)",
+                                       choices = c("Values (0, 1)" = "value",
+                                                   "Raw increase (diff)" = "diff",
+                                                   "Percent increase (rel)" = "rel"),
                                        selected = c("value", "rel"),
                                        inline = TRUE),
                     DT::dataTableOutput("prod_trends_table")),
+            
             tabItem(tabName = "comparison",
                     tags$h1("Product comparison"),
                     fluidRow(
-                        column(width = 4, 
+                        column(width = 6, 
                                uiOutput("prod_1")),
-                        column(width = 4,
+                        column(width = 6,
                                uiOutput("prod_2"))
                     ),
                     fluidRow(
-                        column(width = 4,
-                               imageOutput("prod_1_img")),
-                        column(width = 4,
-                               imageOutput("prod_2_img"))
+                        column(width = 6,
+                               imageOutput("prod_1_img", width="170", height="170")),
+                        column(width = 6,
+                               imageOutput("prod_2_img", width="170", height="170"))
                     ),
                     tags$h2("At a glance"),
                     dataTableOutput("prod_comp_table"),
                     tags$h2("Ratings"),
                     highchartOutput("prod_comp_dist"),
                     tags$h2("Rating trends"),
-                    ts_UI(inputId = "prod", with_stat = TRUE),
+                    ts_UI(inputId = "prod", with_stat = TRUE, smoothing_choice=0),
                     highchartOutput("prod_comp_ts"),
                     tags$h2("N-grams"),
                     selectInput(inputId = "prod_comp_ngram_length",
@@ -367,8 +376,10 @@ dashboardPage(
                     tags$h2("Common sentiments"),
                     highchartOutput("prod_comp_sentiment")
             ),
-            tabItem(tabName = "about")
-        ) # end tab items
-        
+            
+            tabItem(tabName = "about",
+                    tags$h1("About"),
+                    tags$h2("Soon to come..."))
+        ) # end all tab items
     )
 )

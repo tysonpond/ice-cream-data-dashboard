@@ -12,3 +12,12 @@ In this project we:
 4. Built a dashboard using R shiny to bring user interactivity to our explorations.
 
 Tags: data collection, web scraping (Selenium), R, shiny, web app, dashboard, EDA, visualizations (Highcharts), NLP preprocessing (stopwords, lemmatization, POS-tagging & dependency-parsing), n-grams, sentiment analysis (VADER), topic modeling/document clustering (Dirichlet mixture model, K-means), customer reviews, short text, product metrics, business analytics
+
+## Recent changes
+- **Massive update:** Cleaned up & added plot labels, titles, and tooltips.
+- Added functions to streamline plotting (`make_ts_plot()`, `make_word_comparison_barchart()`).
+- Fixed image spacing bug, due to unspecified width & height, in *Product Comparison*.
+- Removed setwd command and added configurable file paths.
+- Finished up *Product* section (esp. the tables for *Leaderboard* and *Trends* ).
+- Finished up *Reviews by sentiment* table.
+- Added `smoothing_choice` option in `ts_UI()` because some figures are inherently more noisy.
