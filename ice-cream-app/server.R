@@ -584,9 +584,7 @@ shinyServer(function(input, output) {
         
         data <- data %>% count(word)
         
-        nrc_sent <- get_sentiments("nrc")
-        
-        data <- data %>% inner_join(nrc_sent, by = "word") %>% group_by(sentiment) %>% summarize(n_sent=sum(n))
+        data <- data %>% inner_join(nrc, by = "word") %>% group_by(sentiment) %>% summarize(n_sent=sum(n))
         
         highchart() %>% 
             hc_chart(polar = TRUE) %>% 
@@ -1297,9 +1295,8 @@ shinyServer(function(input, output) {
         # so our normalized frequencies represent frequencies of all recognized "sentiment words" rather than of all words.
         # This ensures that the heights of the bars for each group sum to 1. An alternative way would be to normalize before,
         # do a left-join, and rename "NA" to "Other/Unrecognized", for a total of 13 bars rather than 12.
-        nrc_sent <- get_sentiments("nrc")
         data <- data %>% 
-            inner_join(nrc_sent, by = "word") %>% 
+            inner_join(nrc, by = "word") %>% 
             group_by(prod_group, sentiment) %>% 
             summarize(n_sent=sum(n)) %>% 
             mutate(n_sent = n_sent/sum(n_sent)) %>% 

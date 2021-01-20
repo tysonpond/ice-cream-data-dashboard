@@ -1,22 +1,31 @@
+# To deploy, run this in another file or in the console
+# library(rsconnect)
+# rsconnect::deployApp(<PATH_TO_APP>)
+# And to terminate
+# terminateApp(<APP_DIRECTORY>)
+
+# Shiny
 library(shiny)
 library(shinydashboard)
 library(shinyWidgets) # radioGroupButtons, etc.
 library(shinyjs)
 library(shinycssloaders)
+library(DT)
 
+# Visualization
 library(highcharter)
+library(colorspace) # for defining fading color scheme for wordclouds
 # library(ggplot2)
 # library(scales) # for wrapping long text labels
 
+# Processing/loading
 library(dplyr)
 library(tidyr) # complete() function and other utilities
 library(lubridate) # date processing
-
 library(xts)
-library(DT)
 library(jsonlite)
 
-# text processing & NLP
+# Text processing & NLP
 library(vegan) # entropy & diversity
 library(tidytext) # get_sentiments()
 library(stringr) # str_squish()
@@ -28,12 +37,9 @@ library(stringr) # str_squish()
 # library(wordcloud)
 # library(wordcloud2) # better wordcloud for Shiny (original wordcloud is hard to size properly in app)
 
-library(colorspace) # for defining fading color scheme for wordclouds
-
 # Change these locations if you change file organization
 # Note: must manually change PATH_TO_IMAGE in `js_prod_table` and `js_sentiment_table` below because string interpolation in R
 # is inconvenient.
-# setwd("C:/Users/tysonp/Desktop/data-science-projects/ice-cream-data-dashboard/shiny_app")
 PATH_TO_APPDATA <- "www/appdata/"
 PATH_TO_IMAGES <- "www/images/"
 
@@ -52,6 +58,15 @@ prod_all <- rev_all %>%
 # Data for topic modeling
 cluster_data_all <- read.csv(paste0(PATH_TO_APPDATA, "cluster_labelings.csv"), encoding = "UTF-8")
 cluster_words_all <- fromJSON(paste0(PATH_TO_APPDATA, "cluster_words.json"))
+
+# # Lexicons -- these require manual downloading which isn't compatible with shinyapps. We'll bypass this by saving our own .csv files.
+# nrc <- get_sentiments("nrc")
+# write.csv(nrc, paste0(PATH_TO_APPDATA, "lexicon_nrc.csv"), row.names = FALSE)
+# afinn <- get_sentiments("afinn")
+# write.csv(afinn, paste0(PATH_TO_APPDATA, "lexicon_afinn.csv"), row.names = FALSE)
+# Now we can load them in
+nrc <- read.csv(paste0(PATH_TO_APPDATA, "lexicon_nrc.csv"), encoding = "UTF-8")
+afinn <- read.csv(paste0(PATH_TO_APPDATA, "lexicon_afinn.csv"), encoding = "UTF-8")
 
 # -------- GLOBAL OPTIONS & HIGHCHARTER THEME ---------
 iconsize <- "fa-1x" # sidebar icon size
@@ -223,7 +238,7 @@ get_all_ngrams <- function(data, max_ngram_length, within_sentence, repeats, wit
         if (with_sent){
                 data <- data %>% 
                         left_join(data.frame(lexicon::hash_valence_shifters), by = c("word" = "x")) %>%
-                        left_join(get_sentiments("afinn"), by = "word") %>%
+                        left_join(afinn, by = "word") %>%
                         rename(w1_valType = y, w1_sent = value)
                 cols <- c(cols, c("w1_valType", "w1_sent"))
         } 
