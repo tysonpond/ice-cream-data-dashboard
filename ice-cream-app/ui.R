@@ -1,14 +1,3 @@
-# This function wraps menuItems which have menuSubItems and prevents expansion/collapsing on menuItem click (i.e. all SubItems will always be shown)
-# https://community.rstudio.com/t/shinydashboard-keep-sidebar-tab-expanded-while-other-tab-is-clicked-expanded/10192/2
-# modify_stop_propagation <- function(x) {
-#     x$children[[1]]$attribs$onclick = "event.stopPropagation()"
-#     x
-# }
-
-padMenuItem <- function(text){
-    return(tags$p(text, style = "margin-left: 20px; display: inline-block;"))
-}
-
 dashboardPage(
     dashboardHeader(title="Ice cream data"),
     dashboardSidebar(

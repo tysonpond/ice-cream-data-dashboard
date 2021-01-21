@@ -495,7 +495,7 @@ shinyServer(function(input, output) {
         
         ngram_data <- all_ngrams_reactive()
         data <- filter_ngrams_pos(ngram_data, ngram_length, pos_input)
-        data <- form_ngrams(data, ngram_length = ngram_length, sep = table_sep)
+        data <- form_ngrams(data, ngram_length = ngram_length, sep = barchart_sep)
 
         data <- data %>% select(doc_id, word) %>% inner_join(rev() %>% select(rev_id, stars), by = c("doc_id" = "rev_id"))
         data <- data %>% mutate(group = case_when(stars < 5 ~ "G1", TRUE ~ "G2"))
@@ -1036,7 +1036,7 @@ shinyServer(function(input, output) {
                               list(orderable = FALSE, className = 'details-control', targets = 0)
                           )
                       ),
-                      callback = js_prod_table) %>% formatRound(5:ncol(data), 2) 
+                      callback = js_prod_table) %>% formatRound(setdiff(names(data)[5:ncol(data)], c("n_0", "n_1")), 2) 
     })
     # ----------- END PRODUCT TRENDS -----
     
@@ -1246,7 +1246,7 @@ shinyServer(function(input, output) {
         ngram_length <- as.integer(input$prod_comp_ngram_length)
         
         data <- all_ngrams_reactive()[[ngram_length]]
-        data <- form_ngrams(data, ngram_length, sep = table_sep)
+        data <- form_ngrams(data, ngram_length, sep = barchart_sep)
         
         data <- data %>% inner_join(rev() %>% select("rev_id","key"), by = c("doc_id" = "rev_id"))
         if (key2 != "all"){

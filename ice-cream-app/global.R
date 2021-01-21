@@ -7,7 +7,7 @@
 # Shiny
 library(shiny)
 library(shinydashboard)
-library(shinyWidgets) # radioGroupButtons, etc.
+# library(shinyWidgets) # radioGroupButtons, etc.
 library(shinyjs)
 library(shinycssloaders)
 library(DT)
@@ -27,7 +27,7 @@ library(jsonlite)
 
 # Text processing & NLP
 library(vegan) # entropy & diversity
-library(tidytext) # get_sentiments()
+# library(tidytext) # get_sentiments("nrc")
 library(stringr) # str_squish()
 # library(tm)
 # library(SnowballC)
@@ -74,7 +74,7 @@ iconsize <- "fa-1x" # sidebar icon size
 # WORD TABLES
 table_sep <- " " # character to separate bigrams/trigrams in table view
 bind_rev_numbers <- TRUE # whether or not to calculate "helpfulness" and "rating" of each word by joining with review stats 
-table_max_words <- 1000
+table_max_words <- FALSE # maximum words to display in tables. If FALSE, all words are kept.
 
 # WORDCLOUDS
 wordcloud_sep <- "_" # character to separate bigrams/trigrams in wordcloud view
@@ -82,6 +82,7 @@ monochrome <- TRUE # controls wordcloud coloring. If FALSE, default is to random
 wordcloud_max_words <- 50 # maximum words to display in wordclouds
 
 # WORD BARCHARTS
+barchart_sep <- "_" # character to separate bigrams/trigrams in barchart view
 barchart_max_words <- 10 # number of words to display in n-gram comparison barcharts
 
 # COLORS & HIGHCHARTS OPTIONS
@@ -106,6 +107,17 @@ options(highcharter.theme = hctheme)
 # -------------- END GLOBAL OPTIONS -----------------
 
 # --------- UI COMPONENTS ---------
+# This function wraps menuItems which have menuSubItems and prevents expansion/collapsing on menuItem click (i.e. all SubItems will always be shown)
+# https://community.rstudio.com/t/shinydashboard-keep-sidebar-tab-expanded-while-other-tab-is-clicked-expanded/10192/2
+# modify_stop_propagation <- function(x) {
+#     x$children[[1]]$attribs$onclick = "event.stopPropagation()"
+#     x
+# }
+
+padMenuItem <- function(text){
+        return(tags$p(text, style = "margin-left: 20px; display: inline-block;"))
+}
+
 # Time series inputs (aggregation frequency, statistic (for brand overview & product comparison), and smoothing)
 ts_UI <- function(inputId, with_stat = FALSE, smoothing_choice = 0){
         UI <- tagList(radioButtons(inputId = paste0(inputId, "_ts_agg_freq"),
