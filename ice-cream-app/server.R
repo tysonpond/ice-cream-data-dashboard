@@ -58,22 +58,19 @@ shinyServer(function(input, output) {
         }, deleteFile = FALSE)
     }, 1:3)
     
-    output$most_reviewed <- renderUI({
-        most_reviewed_UI <- tagList()
-        data <- top3_prod()
-        for (i in 1:3){
-            most_reviewed_UI <- tagList(most_reviewed_UI, column(width = 4,
-                                                                 div(class = "prod-container", style = "width:100%; display:flex; justify-content:center;",
-                                                                     imageOutput(paste0("top_prod_",i), width="170", height="170"),
-                                                                     tags$div(class="prod-overlay",
-                                                                              tags$div(data$name[i]), 
-                                                                              tags$div(paste("Reviews:", data$rating_count[i])),
-                                                                              tags$div(paste("Average rating:", data$rating[i])))
-                                                                 )
-            ))
-        }
-        most_reviewed_UI
-    }) 
+    Map(function(i) {
+        output[[paste0("top_prod_wrapper_", i)]] <- renderUI({
+            data <- top3_prod()
+            column(width = 4,
+                    div(class = "prod-container", style = "width:100%; display:flex; justify-content:center;",
+                     imageOutput(paste0("top_prod_",i), width="170", height="170"),
+                     tags$div(class="prod-overlay",
+                              tags$div(data$name[i]), 
+                              tags$div(paste("Reviews:", data$rating_count[i])),
+                              tags$div(paste("Average rating:", data$rating[i])))
+                    ))
+        })
+    }, 1:3)
     
     output$overview_dist <- renderHighchart({
 
@@ -261,9 +258,13 @@ shinyServer(function(input, output) {
         stats_before <- preprocessed_rev()[["stats_before"]]
         stats_after <- preprocessed_rev()[["stats_after"]]
         data <- data.frame(x=unlist(stats_before, use.names = FALSE), y=unlist(stats_after, use.names = FALSE))
-        rn <- c("Mean words per review", "Median words per reivew", "Vocabulary size", "Number of reviews")
-        cn <- c("", "Before filtering", "After filtering")
-        DT::datatable(data, options = list(searching = FALSE, paging = FALSE, bInfo = FALSE, ordering=F), rownames = rn, colnames = cn, selection = "none")
+
+        DT::datatable(data, 
+                      rownames = c("Mean words per review", "Median words per reivew", "Vocabulary size", "Number of reviews"), 
+                      colnames = c("", "Before filtering", "After filtering"),
+                      class = "display nowrap",
+                      selection = "none", 
+                      options = list(searching = FALSE, paging = FALSE, info = FALSE, ordering = F, scrollX = TRUE))
     })
     
     # output$preprocessed_rev_table <- renderUI({ 
@@ -369,12 +370,17 @@ shinyServer(function(input, output) {
                       simpson = diversity(specie, index = "simpson")) %>%
             mutate(perplexity = 2^entropy)
         
-        df_out <- rbind(all_stats, by_star_stats)
-        df_out <- df_out[,c("stars","nunq", "nunq_dens", "entropy", "perplexity", "simpson")]
-        names(df_out) <- c("Stars", "Unique words", "Unique words density", "Shannon entropy", "Perplexity", "Simpson index")
+        df <- rbind(all_stats, by_star_stats)
+        df <- df[,c("stars","nunq", "nunq_dens", "entropy", "perplexity", "simpson")]
         
-        DT::datatable(df_out, selection = "none", options = list(searching = FALSE, paging = FALSE, bInfo = FALSE, ordering=F), rownames= FALSE) %>% 
-            formatRound(c(3,4,5), 3, mark = "") %>% formatRound(6, 6)
+        df <- DT::datatable(df, 
+                            rownames = FALSE,
+                            colnames = c("Stars", "Unique words", "Unique words density", "Entropy", "Perplexity", "Simpson index"),
+                            class = "display nowrap",
+                            selection = "none", 
+                            options = list(searching = FALSE, paging = FALSE, info = FALSE, ordering = F, scrollX = TRUE)) 
+        
+        df %>% formatRound(c(3,4,5), 3, mark = "") %>% formatRound(6, 6)
     })
     
     output$diversity_plot1 <- renderHighchart({
@@ -417,10 +423,10 @@ shinyServer(function(input, output) {
         hc
     })
     
-    output$rank_freq_wordcloud <- renderHighchart({
+    output$top_words_wordcloud <- renderHighchart({
         data <- preprocessed_rev()[["rev_data"]]
 
-        pos_input <- input$rank_freq_wordcloud_pos
+        pos_input <- input$top_words_wordcloud_pos
         shiny::validate(
             need( length(intersect(pos_input, c("NOUN", "ADJ", "VERB", "other"))) > 0, 
                   "Please select at least one input.")
@@ -539,7 +545,7 @@ shinyServer(function(input, output) {
         data <- preprocessed_rev()[["rev_data"]]
         
         data <- get_cooccurrences(data, cooccurrence_distance, within_sentence, sep = table_sep)
-        data <- get_word_counts(data, bind_rev_numbers = bind_rev_numbers)
+        data <- get_word_counts(data = data, bind_rev_numbers = bind_rev_numbers)
         
         make_wordtable(data, max_words = table_max_words)
     })
@@ -624,22 +630,26 @@ shinyServer(function(input, output) {
         
         data <- cbind(' ' = '\u2295', data)
         
-        DT::datatable(data,
-                      rownames = FALSE,
-                      filter = "top",
-                      selection = "none",
-                      options = list(
-                          scrollX = TRUE,
-                          order = list(5, "asc"),
-                          drawCallback = JS("function() {
-                          this.api().table().column(0).nodes().to$().css({'cursor': 'pointer', 'font-size': '18px' });
-                          }"),
-                          columnDefs = list(
-                              list(visible = FALSE, targets = c(1,2,3)),
-                              list(orderable = FALSE, className = 'details-control', targets = 0)
-                          )
-                      ),
-                      callback = js_sentiment_table) %>% formatRound(c(8,9,12),2)
+        df <- DT::datatable(data,
+                            rownames = FALSE,
+                            class = "display nowrap",
+                            selection = "none",
+                            filter = "top",
+                            options = list(
+                              order = list(list(5, "asc"), list(4, "desc")),
+                              scrollX = TRUE,
+                              lengthChange = FALSE,
+                              drawCallback = JS("function() {
+                              this.api().table().column(0).nodes().to$().css({'cursor': 'pointer', 'font-size': '18px' });
+                              }"),
+                              columnDefs = list(
+                                  list(visible = FALSE, targets = c(1,2,3)),
+                                  list(orderable = FALSE, className = 'details-control', targets = 0)
+                              )
+                            ),
+                            callback = js_sentiment_table)
+        
+        df %>% formatRound(c(8,9,12),2)
     })
     
     output$sent_dist <- renderHighchart({
@@ -896,8 +906,12 @@ shinyServer(function(input, output) {
 
         # note: the column names are originally numeric; however, R does not allow names to start with a number,
         # so we convert the column names to c(Cluster 1, Cluster 2, ...)
-        DT::datatable(cluster_words, selection = "none", options = list(searching = FALSE, paging = FALSE, bInfo = FALSE, ordering=F, scrollX = TRUE), 
-                      rownames = FALSE, colnames = paste("Cluster", 0:(num_clusters-1)) )
+        DT::datatable(cluster_words,
+                      rownames = FALSE, 
+                      colnames = paste("Cluster", 0:(num_clusters-1)),
+                      class = "display nowrap",
+                      selection = "none", 
+                      options = list(searching = FALSE, paging = FALSE, info = FALSE, ordering = F, scrollX = TRUE))
     })
     # ----------- END TOPIC MODELING -------------
     
@@ -917,14 +931,16 @@ shinyServer(function(input, output) {
         data <- data[,c("key","name","description","ingredients","n","mean_rating","sd_rating","first_review","last_review")]
         data <- cbind(' ' = '\u2295', data)
         
-        DT::datatable(data,
+        df <- DT::datatable(data,
                       rownames = FALSE,
                       colnames = c("", "Key", "Name", "Description", "Ingredients", "Number of reviews", "Average rating", "Rating st. dev.", "First review", "Last review"),
-                      filter = "top",
+                      class = "display nowrap",
                       selection = "none",
+                      filter = "top",
                       options = list(
-                          scrollX = TRUE,
                           order = list(2, "asc"),
+                          scrollX = TRUE,
+                          lengthChange = FALSE,
                           drawCallback = JS("function() {
                           this.api().table().column(0).nodes().to$().css({'cursor': 'pointer', 'font-size': '18px' });
                           }"),
@@ -933,7 +949,9 @@ shinyServer(function(input, output) {
                               list(orderable = FALSE, className = 'details-control', targets = 0)
                           )
                       ),
-                      callback = js_prod_table) %>% formatRound(c(7,8), 2) 
+                      callback = js_prod_table)
+        
+        df %>% formatRound(c(7,8), 2) 
     })
     # ------------ END PRODUCT LEADERBOARD -----------
     
@@ -1020,23 +1038,28 @@ shinyServer(function(input, output) {
         
         data <- data[,c("key","name","description","ingredients",setdiff(cols,"key"))]
         data <- cbind(' ' = '\u2295', data)
+
         
-        DT::datatable(data,
-                      rownames = FALSE,
-                      filter = "top",
-                      selection = "none",
-                      options = list(
-                          scrollX = TRUE,
-                          order = list(2, "asc"),
-                          drawCallback = JS("function() {
-                          this.api().table().column(0).nodes().to$().css({'cursor': 'pointer', 'font-size': '18px' });
-                          }"),
-                          columnDefs = list(
-                              list(visible = FALSE, targets = c(1,3,4)),
-                              list(orderable = FALSE, className = 'details-control', targets = 0)
-                          )
-                      ),
-                      callback = js_prod_table) %>% formatRound(setdiff(names(data)[5:ncol(data)], c("n_0", "n_1")), 2) 
+        df <- DT::datatable(data,
+                            rownames = FALSE,
+                            class = "display nowrap",
+                            selection = "none",
+                            filter = "top",
+                            options = list(
+                              order = list(2, "asc"),
+                              scrollX = TRUE,
+                              lengthChange = FALSE,
+                              drawCallback = JS("function() {
+                              this.api().table().column(0).nodes().to$().css({'cursor': 'pointer', 'font-size': '18px' });
+                              }"),
+                              columnDefs = list(
+                                  list(visible = FALSE, targets = c(1,3,4)),
+                                  list(orderable = FALSE, className = 'details-control', targets = 0)
+                              )
+                            ),
+                            callback = js_prod_table)
+        
+        df %>% formatRound(setdiff(names(data)[5:ncol(data)], c("n_0", "n_1")), 2) 
     })
     # ----------- END PRODUCT TRENDS -----
     
@@ -1077,9 +1100,9 @@ shinyServer(function(input, output) {
     
     output$prod_1_img <- renderImage({
         # Note: Upon switching `brand` input, an error message will flash (for 1/2 a sec) due to reactives being updated out of order.
-        # Specifically, the plot here is trying to update before the renderUI for input$prod_1 and input$prod_2 is complete.
+        # Specifically, the UI here is trying to update before the renderUI for input$prod_1 and input$prod_2 is complete.
         # Reference:  https://stackoverflow.com/questions/50340172/how-do-i-avoid-flashing-errors-in-shiny-r-plot
-        # A hacky fix:  req(input$prod_1 %in% prod()$key) will ensure that the renderUI finishes before this plot
+        # A hacky fix:  req(input$prod_1 %in% prod()$key) will ensure that the renderUI finishes before this.
         req(input$prod_1 %in% prod()$key)
         req(input$prod_2 %in% c("all",prod()$key))
         key1 <- input$prod_1
@@ -1092,10 +1115,6 @@ shinyServer(function(input, output) {
     }, deleteFile = FALSE)
     
     output$prod_2_img <- renderImage({
-        # Note: Upon switching `brand` input, an error message will flash (for 1/2 a sec) due to reactives being updated out of order.
-        # Specifically, the plot here is trying to update before the renderUI for input$prod_1 and input$prod_2 is complete.
-        # Reference:  https://stackoverflow.com/questions/50340172/how-do-i-avoid-flashing-errors-in-shiny-r-plot
-        # A hacky fix:  req(input$prod_1 %in% prod()$key) will ensure that the renderUI finishes before this plot
         req(input$prod_1 %in% prod()$key)
         req(input$prod_2 %in% c("all",prod()$key))
         key1 <- input$prod_1
@@ -1119,10 +1138,6 @@ shinyServer(function(input, output) {
     }, deleteFile = FALSE)
     
     output$prod_comp_table <- renderDataTable({
-        # Note: Upon switching `brand` input, an error message will flash (for 1/2 a sec) due to reactives being updated out of order.
-        # Specifically, the plot here is trying to update before the renderUI for input$prod_1 and input$prod_2 is complete.
-        # Reference:  https://stackoverflow.com/questions/50340172/how-do-i-avoid-flashing-errors-in-shiny-r-plot
-        # A hacky fix:  req(input$prod_1 %in% prod()$key) will ensure that the renderUI finishes before this plot
         req(input$prod_1 %in% prod()$key)
         req(input$prod_2 %in% c("all",prod()$key))
         key1 <- input$prod_1
@@ -1145,17 +1160,15 @@ shinyServer(function(input, output) {
             select(-prod_group) %>%
             t()
         
-        DT::datatable(data, options = list(searching = FALSE, paging = FALSE, bInfo = FALSE, ordering=F), 
-                      selection = "none",
+        DT::datatable(data,
+                      rownames = c("Number of reviews", "Average rating", "Rating st. dev.", "First review", "Last review"),
                       colnames = c("Statistic", "Product 1", "Product 2"),
-                      rownames = c("Number of reviews", "Average rating", "Rating st. dev.", "First review", "Last review"))
+                      class = "display nowrap",
+                      selection = "none", 
+                      options = list(searching = FALSE, paging = FALSE, info = FALSE, ordering = F, scrollX = TRUE, lengthChange = FALSE))
     })
     
     output$prod_comp_dist <- renderHighchart({
-        # Note: Upon switching `brand` input, an error message will flash (for 1/2 a sec) due to reactives being updated out of order.
-        # Specifically, the plot here is trying to update before the renderUI for input$prod_1 and input$prod_2 is complete.
-        # Reference:  https://stackoverflow.com/questions/50340172/how-do-i-avoid-flashing-errors-in-shiny-r-plot
-        # A hacky fix:  req(input$prod_1 %in% prod()$key) will ensure that the renderUI finishes before this plot
         req(input$prod_1 %in% prod()$key)
         req(input$prod_2 %in% c("all",prod()$key))
         key1 <- input$prod_1
@@ -1187,10 +1200,6 @@ shinyServer(function(input, output) {
     })
     
     output$prod_comp_ts <- renderHighchart({
-        # Note: Upon switching `brand` input, an error message will flash (for 1/2 a sec) due to reactives being updated out of order.
-        # Specifically, the plot here is trying to update before the renderUI for input$prod_1 and input$prod_2 is complete.
-        # Reference:  https://stackoverflow.com/questions/50340172/how-do-i-avoid-flashing-errors-in-shiny-r-plot
-        # A hacky fix:  req(input$prod_1 %in% prod()$key) will ensure that the renderUI finishes before this plot
         req(input$prod_1 %in% prod()$key)
         req(input$prod_2 %in% c("all",prod()$key))
         key1 <- input$prod_1
@@ -1234,10 +1243,6 @@ shinyServer(function(input, output) {
     })
     
     output$prod_comp_ngrams <- renderHighchart({
-        # Note: Upon switching `brand` input, an error message will flash (for 1/2 a sec) due to reactives being updated out of order.
-        # Specifically, the plot here is trying to update before the renderUI for input$prod_1 and input$prod_2 is complete.
-        # Reference:  https://stackoverflow.com/questions/50340172/how-do-i-avoid-flashing-errors-in-shiny-r-plot
-        # A hacky fix:  req(input$prod_1 %in% prod()$key) will ensure that the renderUI finishes before this plot
         req(input$prod_1 %in% prod()$key)
         req(input$prod_2 %in% c("all",prod()$key))
         key1 <- input$prod_1
@@ -1266,10 +1271,6 @@ shinyServer(function(input, output) {
     })
     
     output$prod_comp_sentiment <- renderHighchart({
-        # Note: Upon switching `brand` input, an error message will flash (for 1/2 a sec) due to reactives being updated out of order.
-        # Specifically, the plot here is trying to update before the renderUI for input$prod_1 and input$prod_2 is complete.
-        # Reference:  https://stackoverflow.com/questions/50340172/how-do-i-avoid-flashing-errors-in-shiny-r-plot
-        # A hacky fix:  req(input$prod_1 %in% prod()$key) will ensure that the renderUI finishes before this plot
         req(input$prod_1 %in% prod()$key)
         req(input$prod_2 %in% c("all",prod()$key))
         key1 <- input$prod_1

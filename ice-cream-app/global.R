@@ -118,6 +118,18 @@ padMenuItem <- function(text){
         return(tags$p(text, style = "margin-left: 20px; display: inline-block;"))
 }
 
+table_wrapper <- function(id, num_rows = 10, pagination = FALSE, filter = FALSE, mobile = FALSE, bMargin = 0){
+        # for mobile adjustment: 68 for iphone X (< 5 pages), 86 for galaxy fold (< 5 pages)
+        height <- 60 + 37*min(num_rows,10) + 2 + 73*pagination + 55*filter + 70*mobile + 28*mobile*(num_rows/10 > 5) 
+        css <- paste0("height:", height+10, ";",
+                       if(bMargin > 0) paste0("margin-bottom:", bMargin, "px;") else "")
+        div(style = css, class = "table-wrap", DT::dataTableOutput(id, height = height) %>% withSpinner(color = primary_col))
+}
+
+plot_wrapper <- function(id){
+        highchartOutput(id) %>% withSpinner(color = primary_col)
+}
+
 # Time series inputs (aggregation frequency, statistic (for brand overview & product comparison), and smoothing)
 ts_UI <- function(inputId, with_stat = FALSE, smoothing_choice = 0){
         UI <- tagList(radioButtons(inputId = paste0(inputId, "_ts_agg_freq"),
@@ -372,7 +384,12 @@ make_wordtable <- function(data, max_words = FALSE){
         if (is.numeric(max_words)){
                 data <- data %>% slice_max(order_by = n, n = max_words, with_ties = FALSE)
         }
-        DT::datatable(data, selection = "none", options = list(order=list(1, "desc")), rownames= FALSE, filter = "top")
+        DT::datatable(data, 
+                      rownames= FALSE,
+                      class = "display nowrap",
+                      selection = "none", 
+                      filter = "top",
+                      options = list(order = list(1, "desc"), scrollX = TRUE, lengthChange = FALSE))
 }
 
 make_wordcloud <- function(data, monochrome = TRUE, max_words = 50){
@@ -452,30 +469,45 @@ process_group_query <- function(data, group_query, agg_freq, normalization, star
         data
 }
 
+# Javascript for expandable table. On (+) click, add div below the selected row with product information and image. On (-) click, return to unexpanded
+# state. For CSS, we fix the height of the expanded div to be 450px and we increment/decrement the table wrapper div's height by this 
+# amount on expand/collapse. We use nowrap for the table cells, but allow wrapping for the expanded div to prevent overflow-x. Finally, using
+# direction:rtl on an outer div makes it so, in the expanded div, the vertical scrollbar will appear on the left which is better because 
+# if there is also overflow-x then the user has to scroll to the right to see the vertical scrollbar.
+# Note: there is a sizing issue which led us to use `(450 + ...)` -- without this, the table overflows vertically on expand (probably due to some
+# padding/margin issue) -- however, using this fix is sometimes too much and causes the empty space below the table to increase in size with each 
+# expanded row.
 js_prod_table <- JS("
         var format = function(d) {
-        return '<div style=\"background-color:#eee; padding: .5em;\">' +
+        return '<div style=\"overflow-y: auto; direction: rtl;\">' +
+               '<div style=\"background-color:#eee; padding: .5em; white-space: normal !important; height: 450px; direction: ltr;\">' +
                '<h3>' + d[2] + '</h3>' +
                '<p>' + d[3] + '</p>' +
                '<h4> Ingredients: </h4>' +
                '<p>' + d[4] + '</p>' +
-               '<img src=\"images/' + d[1] + '.png\" width=200 height=200> </div>';
+               '<img src=\"images/' + d[1] + '.png\" width=200 height=200> </div> </div>';
         };
         table.on('click', 'td.details-control', function() {
         var td = $(this), row = table.row(td.closest('tr'));
+        var tableWrap = this.closest('.table-wrap');
+        var height = tableWrap.offsetHeight;
         if (row.child.isShown()) {
           row.child.hide();
+          $(tableWrap).css('height', (height - (450 + 16)) + 'px');
           td.html('\u2295');
         } else {
+          $(tableWrap).css('height', (height + (450 + 16)) + 'px');
           row.child(format(row.data())).show();
           td.html('\u2296');
         }
         });
         ")
 
+# Essentially the same as the previous javascript, except with a different format function.
 js_sentiment_table <- JS("
         var format = function(d) {
-        return '<div style=\"background-color:#eee; padding: .5em;\">' +
+        return '<div style=\"overflow-y: auto; direction: rtl;\">' +
+               '<div style=\"background-color:#eee; padding: .5em; white-space: normal !important; height: 450px; direction: ltr;\">' +
                '<h3>' + d[1] + '</h3>' +
                '<h4> Review text: </h4>' +
                '<p>' + d[2] + '</p>' +
@@ -484,16 +516,19 @@ js_sentiment_table <- JS("
         };
         table.on('click', 'td.details-control', function() {
         var td = $(this), row = table.row(td.closest('tr'));
+        var tableWrap = this.closest('.table-wrap');
+        var height = tableWrap.offsetHeight;
         if (row.child.isShown()) {
           row.child.hide();
+          $(tableWrap).css('height', (height - (450 + 16)) + 'px');
           td.html('\u2295');
         } else {
+          $(tableWrap).css('height', (height + (450 + 16)) + 'px');
           row.child(format(row.data())).show();
           td.html('\u2296');
         }
         });
         ")
-
 
 # Make times series plots. A slightly quicker pipeline, with just the options we need.
 # If any argument is left as FALSE then it takes on its default behavior.
