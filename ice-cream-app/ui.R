@@ -151,7 +151,7 @@ dashboardPage(
                             table_wrapper("preprocessed_rev_table", num_rows = 4),
                             tags$h2("Words and N-grams"),
                             checkboxInput(inputId = "within_sentence",
-                                          label = "Restrict N-grams & coocurrences to within sentences",
+                                          label = "Restrict N-grams & cooccurrences to within sentences",
                                           value = TRUE),
                             checkboxInput(inputId = "ngram_repeats",
                                           label = "Allow repeats in N-grams",
@@ -238,12 +238,12 @@ dashboardPage(
                     ts_UI(inputId = "ngram", with_stat = FALSE, smoothing_choice = 3),
                     actionButton("ngram_button", "Update"),
                     plot_wrapper("ngram_tracker"),
-                    tags$h2("Noun-adjective coocurrences"),
+                    tags$h2("Noun-adjective cooccurrences"),
                     selectInput(inputId = "cooccurrence_distance",
-                                label = "Coocurrence distance",
+                                label = "Cooccurrence distance",
                                 choices = c(3, 2, 1, -1, -2 ,-3),
                                 selected = -1),
-                    tags$p("Coocurrence distance is the distance of the adjective from the noun.
+                    tags$p("Cooccurrence distance is the distance of the adjective from the noun.
                            A distance of -2 means the adjective is two words BEFORE the noun, whereas
                            a distance of 2 means the adjective is two words AFTER the noun.
                            Note: distance calculated after preprocessing may be much different
