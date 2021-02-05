@@ -1,3 +1,5 @@
+# LITE VERSION
+
 dashboardPage(
     dashboardHeader(title="Ice cream data"),
     dashboardSidebar(

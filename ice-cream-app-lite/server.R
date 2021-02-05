@@ -1,3 +1,5 @@
+# LITE VERSION
+
 shinyServer(function(input, output) {
     # --------- BRAND OVERVIEW --------
     output$brandImage <- renderImage({
@@ -149,7 +151,7 @@ shinyServer(function(input, output) {
     })
     
     output$overview_plot <- renderUI({
-        highchartOutput(input$overview_insight)
+        plot_wrapper(input$overview_insight)
     })
     # --------- END BRAND OVERVIEW ---------
     
@@ -543,9 +545,9 @@ shinyServer(function(input, output) {
         insight <- input[["basic-stats_insight"]]
         req(insight)
         if (insight == "diversity_table1"){
-            dataTableOutput(insight)
+            table_wrapper(insight, num_rows = 6)
         } else {
-            highchartOutput(insight)
+            plot_wrapper(insight)
         }
     })
     # ----------- END BASIC STATS --------
@@ -773,9 +775,12 @@ shinyServer(function(input, output) {
         req(input$words_insight)
         insight <- input$words_insight
         if (substr(insight, start = nchar(insight) - 4, stop = nchar(insight)) == "table"){
-            dataTableOutput(insight)
+            table_wrapper(insight, 
+                          num_rows = if (table_max_words) table_max_words else 1000,
+                          pagination = TRUE,
+                          filter = TRUE)
         } else {
-            highchartOutput(insight)
+            plot_wrapper(insight)
         }
     })
     # ---------- END WORD INSIGHTS ------
@@ -1066,9 +1071,20 @@ shinyServer(function(input, output) {
         req(input$sentiment_insight)
         insight <- input$sentiment_insight
         if (substr(insight, start = nchar(insight) - 4, stop = nchar(insight)) == "table"){
-            dataTableOutput(insight)
+            if (insight == "sentiment_table"){
+                table_wrapper(insight, 
+                              num_rows = 1000,
+                              pagination = TRUE,
+                              filter = TRUE,
+                              bMargin = 86)
+            } else {
+                table_wrapper(insight, 
+                              num_rows = if (table_max_words) table_max_words else 1000,
+                              pagination = TRUE,
+                              filter = TRUE)
+            }
         } else {
-            highchartOutput(insight)
+            plot_wrapper(insight)
         }
     })
     
@@ -1099,6 +1115,10 @@ shinyServer(function(input, output) {
         cluster_data_all %>% filter(brand == input$brand_in)
     })
     
+    cluster_parsedtxt <- reactive({
+        cluster_parsedtxt_all %>% filter(brand == input$brand_in)
+    })
+    
     output$topic_model_vectorspace_header <- renderUI({
         tagList(tags$h3("Visualizing clusters in 2D"),
                 div(style = "display: none;", textInput("topic_model_vectorspace_header", label = "", value = "x")))
@@ -1113,9 +1133,12 @@ shinyServer(function(input, output) {
         col_name <- paste("y", cluster_method, num_clusters, sep = "_")
         data <- cluster_data() %>% select(c("doc_id", "X1", "X2", col_name))
         
-        # note: this currently uses the sentiment reactive which includes valence shifters
+        parsedtxt <- cluster_parsedtxt()
+        reform_sentences <- parsedtxt %>% group_by(doc_id, sentence_id) %>% summarize(sentence=paste0(paste(word, collapse=' '), "."))  
+        reform_docs <- reform_sentences %>% group_by(doc_id) %>% summarize(doc=paste0(sentence, collapse=' '))
+        
         data <- data %>% 
-            inner_join(rev_sentiment() %>% select(doc_id, doc), by = "doc_id") %>%
+            inner_join(reform_docs %>% select(doc_id, doc), by = "doc_id") %>%
             inner_join(rev() %>% select(rev_id, name, title, stars), by = c("doc_id" = "rev_id"))
 
         hchart(data, "scatter", hcaes(x = X1, y = X2, group = !!as.name(col_name))) %>%
@@ -1219,16 +1242,18 @@ shinyServer(function(input, output) {
     })
     
     output[["topic-model_header"]] <- renderUI({
+        req(input$topic_button) 
         uiOutput(paste0(input[["topic-model_insight"]], "_header"))
     })
     
     output[["topic-model_plot"]] <- renderUI({
+        req(input$topic_button) 
         insight <- input[["topic-model_insight"]]
         req(insight)
         if (insight == "topic_model_words"){
-            dataTableOutput(insight)
+            table_wrapper(insight, num_rows = 10)
         } else {
-            highchartOutput(insight)
+            plot_wrapper(insight)
         }
     })
     # ----------- END TOPIC MODELING -------------
@@ -1671,16 +1696,18 @@ shinyServer(function(input, output) {
     })
     
     output$comparison_header <- renderUI({
+        req(input$prod_comp_button)
         uiOutput(paste0(input$comparison_insight, "_header"))
     })
     
     output$comparison_plot <- renderUI({
+        req(input$prod_comp_button)
         req(input$comparison_insight)
         insight <- input$comparison_insight
         if (substr(insight, start = nchar(insight) - 4, stop = nchar(insight)) == "table"){
-            dataTableOutput(insight)
+            table_wrapper(insight, num_row = 5)
         } else {
-            highchartOutput(insight)
+            plot_wrapper(insight)
         }
     })
     # ---------- END PRODUCT COMPARISON -------

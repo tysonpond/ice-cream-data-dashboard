@@ -204,6 +204,6 @@ for (b in c("bj", "hd", "breyers", "talenti")){
 parsedtxt_brands <- parsedtxt_brands %>% 
   inner_join(rev_all %>% select(rev_id, brand, stars), by = c("doc_id" =  "rev_id")) %>%
   filter(stars < 5) %>%
-  select(c("doc_id", "word", "brand"))
+  select(c("doc_id", "sentence_id", "word", "brand"))
   
 write.csv(parsedtxt_brands, "parsed_reviews_for_topic_model.csv", row.names = FALSE)

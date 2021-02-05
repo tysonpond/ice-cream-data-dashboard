@@ -1,3 +1,5 @@
+# FULL VERSION
+
 shinyServer(function(input, output) {
     # --------- BRAND OVERVIEW --------
     output$brandImage <- renderImage({
@@ -820,6 +822,10 @@ shinyServer(function(input, output) {
         cluster_data_all %>% filter(brand == input$brand_in)
     })
     
+    cluster_parsedtxt <- reactive({
+        cluster_parsedtxt_all %>% filter(brand == input$brand_in)
+    })
+    
     output$topic_model_vectorspace <- renderHighchart({
         req(input$topic_button) # req() ensures that this code is only run after the button is clicked
         cluster_method <- isolate(input$cluster_method)
@@ -828,9 +834,12 @@ shinyServer(function(input, output) {
         col_name <- paste("y", cluster_method, num_clusters, sep = "_")
         data <- cluster_data() %>% select(c("doc_id", "X1", "X2", col_name))
         
-        # note: this currently uses the sentiment reactive which includes valence shifters
+        parsedtxt <- cluster_parsedtxt()
+        reform_sentences <- parsedtxt %>% group_by(doc_id, sentence_id) %>% summarize(sentence=paste0(paste(word, collapse=' '), "."))  
+        reform_docs <- reform_sentences %>% group_by(doc_id) %>% summarize(doc=paste0(sentence, collapse=' '))
+                                                         
         data <- data %>% 
-            inner_join(rev_sentiment() %>% select(doc_id, doc), by = "doc_id") %>%
+            inner_join(reform_docs %>% select(doc_id, doc), by = "doc_id") %>%
             inner_join(rev() %>% select(rev_id, name, title, stars), by = c("doc_id" = "rev_id"))
 
         hchart(data, "scatter", hcaes(x = X1, y = X2, group = !!as.name(col_name))) %>%

@@ -13,16 +13,16 @@ In this project we:
 
 Tags: data collection, web scraping (Selenium), R, shiny, web app, dashboard, EDA, visualizations (Highcharts), NLP preprocessing (stopwords, lemmatization, POS-tagging & dependency-parsing), n-grams, sentiment analysis (VADER), topic modeling/document clustering (Dirichlet mixture model, K-means), customer reviews, short text, product metrics, business analytics
 
-## Recent changes & TO DOs
-- **Built a "lite" version of the app.** The "full" version has multiple expensive computations/plots rendered on the same tab, at the same time, while the lite version allows the user to only see 1 insight at a time -- thus being more efficient. It's also easy to comment out unwanted tabs/insights (i.e. Topic Modeling, since it wasn't very useful), in case we want to make the app even "lite-r".
+## Recent changes
+- Fixed many of the glitches due to transition to "lite" version of app (mostly in Product Comparison & Topic Modeling). 
+- Re-added plot + table wrappers.
+- Modified topic modeling vector space plot to use `parsed_reviews_for_topic_modeling.csv` data.
 
-- There are still some glitches to work out with the lite version:
-   - Prevent automatic scrolling to top on "insight" selection. Instead we should be scrolling down. Adding margin-bottom to the plot shown may help.
-   - Fix interaction with buttons (in Topic Modeling & Product Comparison tabs). Clicking insight without clicking button still shows the header.
-   - Glitch in Product Comparison where Product 1 & Product 2 (selectInputs + images) are blank.
-   - Change default behavior when switching brands. Glitch in product comparison where whatever insight you're currently on goes blank and "breaks" -- i.e. even changing to another insight and then re-clicking doesn't show it. Perhaps we should refresh entire page/app on brand change. 
-   - Would be nice to share some inputs between "insights", for example n-gram length or POS filtering between Table/Wordcloud views.
-
-- Note: some UI/options were reformatted/removed. Mainly, we removed the words_display_method option in Settings and replaced it with separate links on each tab. We use our own server logic to select Table/Wordcloud instead of conditonalPanel.
-
--Need to add table_wrapper & plot_wrapper back.
+## To do
+- Add to About page
+- Optional:
+   - touch up UI (i.e., CSS for "insight" `<li>`'s)
+   - optimize queries (avoid joins) & add "expected runtime" to each insight
+   - add plot descriptions (why the plot is important/what we can learn from it) underneath each header
+   - add a video demo to README
+- Deploy

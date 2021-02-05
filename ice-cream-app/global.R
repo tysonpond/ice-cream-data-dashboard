@@ -1,3 +1,5 @@
+# FULL VERSION
+
 # To deploy, run this in another file or in the console
 # library(rsconnect)
 # rsconnect::deployApp(<PATH_TO_APP>)
@@ -58,6 +60,7 @@ prod_all <- rev_all %>%
 # Data for topic modeling
 cluster_data_all <- read.csv(paste0(PATH_TO_APPDATA, "cluster_labelings.csv"), encoding = "UTF-8")
 cluster_words_all <- fromJSON(paste0(PATH_TO_APPDATA, "cluster_words.json"))
+cluster_parsedtxt_all <- read.csv(paste0(PATH_TO_APPDATA, "parsed_reviews_for_topic_model.csv"), encoding = "UTF-8")
 
 # # Lexicons -- these require manual downloading which isn't compatible with shinyapps. We'll bypass this by saving our own .csv files.
 # nrc <- get_sentiments("nrc")
