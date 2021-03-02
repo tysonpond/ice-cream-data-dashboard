@@ -504,7 +504,6 @@ shinyServer(function(input, output) {
     
     output$top_words_wordcloud_header <- renderUI({
         tagList(tags$h3("Top words"),
-                tags$p("Note: hovering over the wordcloud shows log10(freq) rather than freq."),
                 checkboxGroupInput(inputId = "top_words_wordcloud_pos",
                                    label = "POS",
                                    choices = c("Noun" = "NOUN",

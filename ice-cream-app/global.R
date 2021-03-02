@@ -101,10 +101,10 @@ primary_col <- color_theme[1]
 hctheme$colors <- color_theme
 hctheme$title$align <- 'left' # title position
 hctheme$subtitle$align <- 'left' # title position
-hctheme$title$style$fontSize <- '18px' # title font size
-hctheme$subtitle$style$fontSize <- '16px' # subtitle font size
-hctheme$xAxis$title$style$fontSize <- '16px' # x label font size
-hctheme$yAxis$title$style$fontSize <- '16px' # y label font size
+hctheme$title$style$fontSize <- '24px' # title font size
+hctheme$subtitle$style$fontSize <- '20px' # subtitle font size
+hctheme$xAxis$title$style$fontSize <- '18px' # x label font size
+hctheme$yAxis$title$style$fontSize <- '18px' # y label font size
 hctheme$yAxis$opposite <- FALSE # If TRUE, time series "stock" graphs will place y ticks and y label on right side.
 options(highcharter.theme = hctheme)
 # -------------- END GLOBAL OPTIONS -----------------
@@ -121,12 +121,17 @@ padMenuItem <- function(text){
         return(tags$p(text, style = "margin-left: 20px; display: inline-block;"))
 }
 
+# # This function is supposed to estimate the height of the table before rendering so that the document does not expand vertically. 
+# # However, I found this impossible to implement correctly for all display sizes, so I am commenting this out.
+# table_wrapper <- function(id, num_rows = 10, pagination = FALSE, filter = FALSE, mobile = FALSE, bMargin = 0){
+#         # for mobile adjustment: 68 for iphone X (< 5 pages), 86 for galaxy fold (< 5 pages)
+#         height <- 60 + 37*min(num_rows,10) + 2 + 73*pagination + 55*filter + 70*mobile + 28*mobile*(num_rows/10 > 5) 
+#         css <- paste0("height:", height+10, ";",
+#                       if(bMargin > 0) paste0("margin-bottom:", bMargin, "px;") else "")
+#         div(style = css, class = "table-wrap", DT::dataTableOutput(id, height = height) %>% withSpinner(color = primary_col))
+# }
 table_wrapper <- function(id, num_rows = 10, pagination = FALSE, filter = FALSE, mobile = FALSE, bMargin = 0){
-        # for mobile adjustment: 68 for iphone X (< 5 pages), 86 for galaxy fold (< 5 pages)
-        height <- 60 + 37*min(num_rows,10) + 2 + 73*pagination + 55*filter + 70*mobile + 28*mobile*(num_rows/10 > 5) 
-        css <- paste0("height:", height+10, ";",
-                       if(bMargin > 0) paste0("margin-bottom:", bMargin, "px;") else "")
-        div(style = css, class = "table-wrap", DT::dataTableOutput(id, height = height) %>% withSpinner(color = primary_col))
+        div(class = "table-wrap", DT::dataTableOutput(id) %>% withSpinner(color = primary_col))
 }
 
 plot_wrapper <- function(id){
@@ -409,7 +414,7 @@ make_wordcloud <- function(data, monochrome = TRUE, max_words = 50){
         } else {
                 hc <- hchart(data, "wordcloud", hcaes(name = word, weight = freq))
         }
-        hc
+        hc %>% hc_tooltip(headerFormat = "", pointFormatter = JS("function() {return '<b>' + this.word + '</b><br>' + 'count: ' + this.n}"))
 }
 
 get_cooccurrences <- function(data, d, within_sentence, sep = "_"){
