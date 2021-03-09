@@ -71,6 +71,12 @@ dashboardPage(
             #prod-images-row {
                 margin-bottom: 40px;
             }
+            #most-reviewed-row {
+                max-width: 800px;
+            }
+            .overview-vbox-row {
+                max-width: 1200px;
+            }
             ")),
             tags$style(HTML(
             paste(
@@ -113,13 +119,18 @@ dashboardPage(
                 tags$h1("Brand overview"),
                 tags$h2("At a glance"),
                 fluidRow(
-                    valueBoxOutput("n_revs"),
-                    valueBoxOutput("n_prods"),
-                    valueBoxOutput("rev_per_prod"),
-                    valueBoxOutput("avg_rating")
+                    class="overview-vbox-row",
+                    column(6, valueBoxOutput("n_revs", width = "100%")),
+                    column(6, valueBoxOutput("n_prods", width = "100%")),
+                ),
+                fluidRow(
+                    class="overview-vbox-row",
+                    column(6, valueBoxOutput("rev_per_prod", width = "100%")),
+                    column(6, valueBoxOutput("avg_rating", width = "100%")),
                 ),
                 tags$h2("Most reviewed"),
                 fluidRow(
+                    id = "most-reviewed-row",
                     Map(function(i) {
                         uiOutput(paste0("top_prod_wrapper_", i))
                         }, 1:3)

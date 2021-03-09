@@ -1,4 +1,4 @@
-# Ice cream data dashboard
+# Ice cream data dashboard 🍦
 
 ## Overview
 In this project we: 
@@ -27,18 +27,11 @@ In the app, the user can configure several settings related to word filtering. T
 ### Notes
 For the "Sentiment analysis" and "Topic modeling" sections we have different configurations. For "Sentiment analysis", valence shifters are toggled on regardless of what the user chose, because they are essential to the sentiment model. Our work for "Topic Modeling" was prepared in an external Python script with fixed processing configurations (lemmatization, SMART stopwords, name and ingredient stopwords, no filtering by document frequency, max vocab 5000, and do not keep valence shifters).
 
+The "full version" (`ice-cream-app/`) is no longer being maintained. The version deployed is `ice-cream-app-lite/`.
 
 ## Planned improvements/further ideas
 - Add a video demo to README
 - Improve UI: there's a lot of room for improvement here
    - Scroll plot into view after loading
    - Make it so the document does not expand vertically after plots render, i.e. put in the **exact** amount of required vertical space before rendering
-      - For homepage may want to display an initial loader
-   - Overall styling (layout, make header fixed, homepage could be improved, colors, etc.)
-   - Add plot descriptions (why the plot is important/what we can learn from it) under each header to assist user
-   - Make about section more succint / replace text with images
-   - Improve plot tooltips (especially for time series)
-- Time/space optimizations: 
-   - Need to improve load times -- this seems to be a challenge with R Shiny.
-   - Might be helpful to move large files (data and images) to a separate server
-   - Optimize queries if possible (avoid extra joins) 
+   - For homepage may want to display an initial loader
